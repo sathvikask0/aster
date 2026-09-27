@@ -14,3 +14,6 @@ checkpoints/
 *.safetensors
 *.h5ad
 wandb/
+*.egg-info/
+build/
+dist/

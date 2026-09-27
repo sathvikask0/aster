@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aster-biology"
+version = "0.1.0"
+description = "Experimental typed biological decisions with jointly trained encoders"
+requires-python = ">=3.11"
+dependencies = ["torch>=2.6,<3", "transformers==4.57.6", "numpy>=2,<3", "anndata>=0.11,<0.13", "scikit-learn>=1.6,<2", "scipy>=1.14,<2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[tool.setuptools.packages.find]
+include = ["aster*"]

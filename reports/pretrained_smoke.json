@@ -1,0 +1,45 @@
+{
+  "purpose": "Integration smoke test only; artificial sequences, synthetic features and labels. No biological accuracy measured.",
+  "device": "mps",
+  "protein_model": "facebook/esm2_t6_8M_UR50D",
+  "protein_revision": "c731040fcd8d73dceaa04b0a8e6329b345b0f5df",
+  "text_model": "prajjwal1/bert-tiny",
+  "text_revision": "6f75de8b60a9f8a2fdf7b69cbd86d9e64bcb3837",
+  "protein_unfrozen_layers": 2,
+  "text_unfrozen_layers": 1,
+  "steps": 3,
+  "losses": [
+    1.111410140991211,
+    1.0624032020568848,
+    1.0166150331497192
+  ],
+  "last_block_gradient_l1": {
+    "protein": 60.303647086024284,
+    "text": 141.1108994976821
+  },
+  "updated_parameter_tensors": {
+    "protein": 34,
+    "text": 16
+  },
+  "all_frozen_parameters_unchanged": true,
+  "decision": {
+    "choice": [
+      0,
+      2
+    ],
+    "probabilities": [
+      [
+        0.36935046315193176,
+        0.28113844990730286,
+        0.34951111674308777
+      ],
+      [
+        0.3626040518283844,
+        0.24998630583286285,
+        0.38740962743759155
+      ]
+    ],
+    "calibrated": false,
+    "status": "experimental"
+  }
+}

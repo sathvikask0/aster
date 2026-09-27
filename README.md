@@ -1,65 +1,102 @@
 # Aster
 
-**An open research project for biological decisions with protein, cell, and language models.**
+**An open research project for typed biological decisions using protein, cell, and language representations.**
 
-Aster aims to combine what a protein is, the current state of a cell, and a focused biological question to predict experimentally measurable outcomes.
+Give Aster a biological context and candidate answers; its proposed role is to return structured predictions that researchers can evaluate against experiments.
 
-**Status: design stage. No Aster model has been trained or validated yet.**
+## Current status
 
-## Proposed architecture
+**v0.1 is a working engineering prototype, not a biologically validated model.**
+
+Implemented and tested:
+
+- Joint ESM-2 and text-encoder fine-tuning, with configurable trainable suffix layers.
+- A small learned cell-state encoder as an explicit baseline (not pretrained Arc SE/scGPT).
+- Shared ESM weights for the intervention protein and readout protein.
+- Dot-product choice scores and typed outputs, explicitly marked **uncalibrated**.
+- A trainer that rejects train/validation/test overlap in intervention groups.
+- An audit and descriptive baselines on an official Arc training-data sample.
+- Real pretrained-encoder gradient checks on Apple MPS, using synthetic inputs/labels.
+
+No trained biological Aster weights are released. The larger research configuration, pretrained cell backbone, calibration, and full-cohort benchmark remain unfinished.
+
+## First capability
+
+> Given a cell's starting state, will reducing one gene's activity increase or decrease another gene's RNA level?
+
+A gene contains instructions that a cell can use to make RNA and often protein. Arc's perturbation experiments measure how RNA levels change after a gene is turned down. These measurements can supervise bounded questions about cellular responses; they do not establish effects on lifespan or clinical outcomes.
+
+## Architecture
 
 ```text
-Protein sequence       → ESM-2 protein encoder ──┐
-Starting gene activity → cell-state encoder ────┼→ fusion + decision heads
-Question / assay       → text encoder ──────────┘
-                                                ↓
-                                 choices, scores, probabilities
+Intervention protein → ESM-2 ──────────────┐
+Readout protein      → shared ESM-2 ───────┼→ state projection → q
+Control-cell profile → learned cell MLP ──┘
+
+Question + each candidate answer → text encoder → projection → v_i
+
+logit_i = dot(normalize(q), normalize(v_i)) / temperature
+choice probabilities = softmax(logits)
 ```
 
-We plan to jointly fine-tune the last few layers of the encoders and train the fusion and decision heads. Earlier layers remain frozen. Protein candidates can share an ESM-2 backbone. Independent branches can be batched or run concurrently at inference; performance will be measured rather than assumed.
+The default compact configuration uses ESM-2 8M and BERT-tiny for integration tests. The last two ESM blocks and last text block are trainable. `configs/research.json` specifies ESM-2 650M and ModernBERT-large, with their last three blocks trainable; that larger configuration has not yet been run here. The cell MLP, projections and temperature are trainable. Encoder outputs are recomputed during training; only tokenization is cached.
 
-Dot-product scores with softmax can support candidate ranking. They are not automatically calibrated probabilities of biological events. Binary or categorical outcome heads require experimental labels and separate calibration and evaluation.
+Independent branches can be batched or run concurrently at inference. No latency claim has been measured. Softmax is a distribution over supplied choices, not automatically a calibrated biological probability. A future abstention rule must be validated under distribution shift; entropy alone is not evidence that a model knows when it is wrong.
 
-## First research question
+## Run the checks
 
-> Given a cell's starting state, how does reducing the activity of one gene change the activity of other genes?
+Install [uv](https://docs.astral.sh/uv/) and use Python 3.11:
 
-Arc Institute's released 2025 Virtual Cell Challenge dataset is a candidate starting point. The initial benchmark would predict measured changes relative to control cells. Labels, thresholds, preprocessing, data access, and splits remain to be finalized. Gene activity is an RNA measurement, not a direct measurement of protein activity or lifespan.
+```bash
+uv sync --python 3.11 --extra test --locked
+uv run pytest -q
+uv run python scripts/audit_arc.py
+uv run python scripts/smoke_pretrained.py
+```
+
+The audit downloads a roughly 5 MB checksum-verified sample directly from a pinned Arc repository commit. The pretrained smoke test downloads the compact encoder weights, executes three optimization steps on MPS when available, and verifies updates in both encoders and unchanged frozen weights. Its inputs and labels are artificial: loss values are not biological performance.
+
+Reports are in [`reports/`](reports/). See the [first milestone report](reports/MILESTONE_01.md).
+
+## Training on experimental data
+
+```bash
+uv run python scripts/train.py data/experimental_rows.jsonl --out checkpoints/experiment
+# Larger, not yet validated configuration:
+uv run python scripts/train.py data/experimental_rows.jsonl --config configs/research.json
+```
+
+Supply JSONL records with:
+
+- `split`: `train`, `validation`, or `test`.
+- `intervention_group`: a stable group identifier shared by all rows for the intervention; use homology clusters when required by the evaluation.
+- `evidence_id`: traceable experimental source identifier.
+- `intervention_sequence` and `readout_sequence`: amino-acid sequences.
+- `cell_state`: a fixed-order numerical vector derived from **control/pre-intervention** cells only.
+- `question`, `options`, and integer `label`: the experimentally defined categorical task.
+
+Feature order, normalization, label definitions and gene/protein mapping must be fixed and documented before training. Do not populate `cell_state` from treated cells: that leaks the outcome. The trainer checks group separation but cannot establish correct scientific provenance or independently detect all homology/batch leakage. It rejects overlong sequences instead of silently truncating them. Domain selection/windowing needs an explicit protocol before using long proteins.
+
+Validation loss is macro-averaged across intervention groups to select a checkpoint. The trainer leaves test rows untouched. Full held-out evaluation and calibration are still required before publishing biological performance.
+
+## Data plan and limitations
+
+Our official Arc sample contains 600 cells, 1,000 measured genes, five interventions, controls, and multiple experimental batches. It is sufficient for pipeline checks only. The descriptive baseline bins observed normalized expression changes; these bins are not significance or equivalence tests. Cells are not independent experimental replicates. See [data audit](reports/arc_sample_audit.json).
+
+The [full Arc Virtual Cell Atlas](https://github.com/ArcInstitute/arc-virtual-cell-atlas) currently uses Google Cloud Marketplace / Requester Pays access. No cloud subscription or billed download has been initiated. Arc also hosts a roughly 30 GB [filtered Replogle dataset](https://huggingface.co/datasets/arcinstitute/State-Replogle-Filtered); its metadata, provenance and license need auditing before selecting it as an alternative. Neither full dataset has been downloaded or used to train Aster.
+
+[Arc State Embedding](https://huggingface.co/arcinstitute/SE-600M) and [scGPT](https://github.com/bowang-lab/scGPT) remain candidate pretrained cell encoders. Arc State weights carry noncommercial restrictions and are not included.
 
 ## Evaluation commitments
 
-- Hold out complete interventions; use independent cellular contexts when the data supports this.
-- Account for related proteins, experimental batches, and repeated cell measurements when defining splits.
-- Compare against simple baselines and ablations without the protein or text branch.
-- Measure calibration, generalization, and the trade-off between abstaining and making predictions.
-- Publish reproducible configurations, provenance, limitations, and negative results.
+- Hold out entire interventions and, when supported, protein families and cellular contexts.
+- Compare with global and per-readout priors, linear models, and no-ESM/no-text ablations.
+- Evaluate batch effects, label stability, class imbalance, calibration and abstention.
+- Use experimental replicates or studies as uncertainty units when available.
+- Report negative results and distinguish engineering tests from biological validation.
 
-Large cell counts do not imply equally many independent experiments. A model predicting gene-expression changes does not establish a treatment's safety, efficacy, or effect on longevity.
+## Inspiration and license
 
-## Candidate components and data
+Inspired by [TypeSafe's Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev): focused, typed decisions with measurable uncertainty. Aster is independent, is not a reproduction of Jev, and does not claim to implement its undisclosed RLCD recipe. Our starting approach is supervised learning on experimental outcomes.
 
-- [ESM-2](https://github.com/facebookresearch/esm): protein sequence encoder.
-- [ModernBERT](https://huggingface.co/answerdotai/ModernBERT-large): candidate question/assay text encoder.
-- [Arc State Embedding](https://huggingface.co/arcinstitute/SE-600M) or [scGPT](https://github.com/bowang-lab/scGPT): candidate cell encoder.
-- [Arc Virtual Cell Atlas](https://github.com/ArcInstitute/arc-virtual-cell-atlas): candidate experimental data.
-
-The cell encoder has not been selected. Arc State model weights carry noncommercial restrictions; they are not included here. Each dependency, dataset, and checkpoint retains its own license. Data-access requirements and permitted redistribution will be checked before inclusion.
-
-## Inspiration
-
-Aster is inspired by the idea of typed, probabilistic decisions described by [TypeSafe's Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev). It is an independent biological research project, not a reproduction of Jev's undisclosed architecture or training algorithm. Our starting approach is supervised learning on experimental outcomes; no RLCD implementation is claimed.
-
-## Roadmap
-
-1. Audit a public dataset and establish leakage-resistant evaluation splits.
-2. Implement and evaluate simple baselines.
-3. Train the joint encoder prototype and measure the contribution of each branch.
-4. Release verified training/inference code, evaluation results, and compatible model artifacts.
-
-## Contributing
-
-Contributions to experimental design, data curation, baseline models, calibration, and reproducibility are welcome. Please open an issue before undertaking a substantial change.
-
-## License
-
-Original repository code and documentation are available under the MIT License. This does not relicense third-party data, models, or software.
+Original code and documentation are MIT licensed. Third-party data, weights and software retain their own licenses. Source datasets and pretrained weights are not redistributed in this repository.
