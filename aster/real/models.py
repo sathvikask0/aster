@@ -79,3 +79,78 @@ class RealAster(nn.Module):
             v = torch.ones_like(v) * (self.h ** -0.5)
 
         return torch.einsum("bh,boh->bo", u, v) * (self.h ** -0.5)
+
+
+class CrossAttentionAster(nn.Module):
+    """Question conditions entity representation via Multi-Head Cross-Attention.
+
+    Instead of a rigid pooled dot product u^T v, the question queries the entity
+    representation across multi-channel feature subspaces, allowing language tokens
+    (cationic, hydrophobic, lipid A, peptidoglycan) to dynamically select and weight
+    relevant biophysical features.
+    """
+
+    def __init__(self, d_entity, d_text, n_tasks, h=256, n_heads=4, mode="dual", p=0.1, n_slots=8):
+        super().__init__()
+        self.mode = mode
+        self.h = h
+        self.n_slots = n_slots
+
+        # Project entity into feature slots (or residue subspaces)
+        self.entity_proj = nn.Sequential(
+            nn.Linear(d_entity, h * n_slots),
+            nn.GELU(),
+            nn.LayerNorm(h * n_slots),
+            nn.Dropout(p),
+        )
+
+        if mode == "task_id":
+            self.q = nn.Embedding(n_tasks + 1, h)
+            nn.init.zeros_(self.q.weight[0])  # unseen = 0 -> chance
+        else:
+            self.q_proj = nn.Sequential(
+                nn.Linear(d_text, h),
+                nn.GELU(),
+                nn.LayerNorm(h),
+                nn.Dropout(p),
+            )
+
+        # Cross attention: Query = Question, Key/Value = Entity Slots
+        self.cross_attn = nn.MultiheadAttention(embed_dim=h, num_heads=n_heads, dropout=p, batch_first=True)
+        self.norm = nn.LayerNorm(h)
+
+        # Classification head for binary choice (0 = inactive/negative, 1 = active/positive)
+        self.head = nn.Sequential(
+            nn.Linear(h, h // 2),
+            nn.GELU(),
+            nn.Dropout(p),
+            nn.Linear(h // 2, 2),
+        )
+
+    def forward(self, batch):
+        b = batch["x"].size(0)
+
+        # 1. Prepare Key & Value from Entity
+        if self.mode == "question_only":
+            # Zero out entity so model must rely only on question prior
+            kv = torch.zeros(b, self.n_slots, self.h, device=batch["x"].device)
+        else:
+            slots = self.entity_proj(batch["x"])  # [B, n_slots * H]
+            kv = slots.view(b, self.n_slots, self.h)  # [B, n_slots, H]
+
+        # 2. Prepare Query from Question
+        if self.mode == "task_id":
+            q = self.q(batch["task_id"]).unsqueeze(1)  # [B, 1, H]
+        else:
+            q_raw = batch["q_emb"]
+            if self.mode == "entity_only":
+                q = torch.ones(b, 1, self.h, device=q_raw.device) * (self.h ** -0.5)
+            else:
+                q = self.q_proj(q_raw).unsqueeze(1)  # [B, 1, H]
+
+        # 3. Cross-Attention
+        attn_out, _ = self.cross_attn(query=q, key=kv, value=kv)  # [B, 1, H]
+        out = self.norm(q + attn_out).squeeze(1)  # [B, H]
+
+        # 4. Predict logits
+        return self.head(out)
