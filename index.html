@@ -712,7 +712,7 @@
               <td class="model-name">cross_attention</td>
               <td>ESM-2 + Mechanistic MHA</td>
               <td class="num">0.555</td>
-              <td class="delta-pos">+0.016</td>
+              <td class="delta-pos">+0.054</td>
               <td class="num">0.576 <span class="delta-pos">(+0.002)</span></td>
               <td class="num">0.590</td>
               <td class="num">0.531</td>
@@ -721,34 +721,34 @@
               <td class="model-name">dual_dot</td>
               <td>ESM-2 + Pooled Dot-Product</td>
               <td class="num">0.537</td>
-              <td class="delta-neg">−0.002</td>
+              <td class="delta-pos">+0.036</td>
               <td class="num">0.563 (−0.011)</td>
               <td class="num">0.566</td>
               <td class="num">0.502</td>
             </tr>
             <tr>
-              <td class="model-name">task_id</td>
-              <td>Lookup table floor</td>
-              <td class="num">0.539</td>
-              <td class="num">0.000</td>
-              <td class="num">0.537 (−0.037)</td>
-              <td class="num">0.563</td>
-              <td class="num">0.526</td>
-            </tr>
-            <tr>
               <td class="model-name">entity_only</td>
-              <td>Peptide prior</td>
+              <td>Peptide prior shortcut</td>
               <td class="num">0.533</td>
-              <td class="delta-neg">−0.006</td>
+              <td class="delta-pos">+0.032</td>
               <td class="num">0.537</td>
               <td class="num">0.564</td>
               <td class="num">0.507</td>
             </tr>
             <tr>
+              <td class="model-name">task_id</td>
+              <td>Lookup table floor</td>
+              <td class="num">0.501</td>
+              <td class="num">0.000</td>
+              <td class="num">0.504 (−0.070)</td>
+              <td class="num">0.487</td>
+              <td class="num">0.500</td>
+            </tr>
+            <tr>
               <td class="model-name">question_only</td>
-              <td>Label prior</td>
+              <td>Label prior shortcut</td>
               <td class="num">0.499</td>
-              <td class="delta-neg">−0.040</td>
+              <td class="delta-neg">−0.002</td>
               <td class="num">0.496</td>
               <td class="num">0.513</td>
               <td class="num">0.500</td>
@@ -758,9 +758,9 @@
       </div>
 
       <div class="highlight-card" style="border-color: rgba(16, 185, 129, 0.4); background: linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, rgba(17, 19, 26, 0.95) 100%);">
-        <div class="highlight-stat" style="color: #6ee7b7;">cross_attn 0.555 vs task_id 0.539 (+0.016)</div>
+        <div class="highlight-stat" style="color: #6ee7b7;">cross_attn 0.555 vs task_id 0.501 (+0.054)</div>
         <div class="highlight-text">
-          The lookup equivalence is broken. With 16 training tasks and mechanistic prompt terms, cross-attention achieves positive transfer (+0.002 over ceiling on K. pneumoniae) where task_id remains negative (-0.037).
+          The lookup equivalence is broken. With 16 training tasks and mechanistic prompt terms, cross-attention beats the lookup floor by +5.4% and achieves positive transfer (+0.002 over ceiling on K. pneumoniae) where task_id fails (−0.070).
         </div>
       </div>
     </section>

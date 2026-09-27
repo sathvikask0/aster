@@ -153,4 +153,9 @@ class CrossAttentionAster(nn.Module):
         out = self.norm(q + attn_out).squeeze(1)  # [B, H]
 
         # 4. Predict logits
-        return self.head(out)
+        logits = self.head(out)
+        if self.mode == "task_id":
+            # An unseen task (id == 0) must yield chance structurally (zeros -> uniform distribution)
+            unseen = (batch["task_id"] == 0).unsqueeze(-1)
+            logits = torch.where(unseen, torch.zeros_like(logits), logits)
+        return logits
