@@ -4,7 +4,7 @@
 
 Give Aster a biological context and candidate answers; its proposed role is to return structured predictions that researchers can evaluate against experiments.
 
-> 📄 **Negative Result Report:** [The text encoder isn't doing anything (September 2026)](https://sathvikask0.github.io/aster/)
+> 📄 **Reports:** [The text encoder isn't doing anything (September 2026)](https://sathvikask0.github.io/aster/)
 
 ## Current status
 
@@ -58,7 +58,36 @@ uv run python scripts/smoke_pretrained.py
 
 The audit downloads a roughly 5 MB checksum-verified sample directly from a pinned Arc repository commit. The pretrained smoke test downloads the compact encoder weights, executes three optimization steps on MPS when available, and verifies updates in both encoders and unchanged frozen weights. Its inputs and labels are artificial: loss values are not biological performance.
 
-Reports are in [`reports/`](reports/). See the [first milestone report](reports/MILESTONE_01.md).
+Reports are in [`reports/`](reports/):
+
+| Report | What it says |
+|---|---|
+| [MILESTONE_01](reports/MILESTONE_01.md) | First working pipeline. |
+| [CONTROL_RIG](reports/CONTROL_RIG.md) | The evaluation, tested on synthetic data whose ground truth we control, before it was pointed at biology. |
+| [RESOLUTION_01](reports/RESOLUTION_01.md) | v0.2 multi-task benchmark. The text encoder stops being a lookup table; it still does not clear the composition shortcut. Corrected 27 Sep 2026 — see the note at the top. |
+| [IN_PROGRESS_01](reports/IN_PROGRESS_01.md) | The experiment being set up now: composition-matched negatives, so the shortcut cannot exist. Pre-registered, not yet run. |
+
+### Benchmark reporting rule
+
+Every claim in these reports is a margin over the **shortcut ceiling** —
+`max(majority, out-of-fold composition probe)` — and never over `task_id`.
+`task_id` is the lookup floor: beating it shows the text tower is not a lookup
+table, which is a statement about the architecture, not about biology. The
+ceiling is computed in one place, [`aster/real/ceilings.py`](aster/real/ceilings.py),
+scored out of fold so it cannot be inflated by fitting and scoring on the same
+rows. A lift smaller than the combined 95% intervals is not a result.
+
+```bash
+uv run python scripts/run_amp_multitask.py --esm 8M --max-peptides 4000
+uv run python scripts/recompute_ceilings.py reports/amp_multitask_results.json
+```
+
+Negatives in the AMP benchmark are **presumed, not measured**: the source tables
+record reported activity and never recorded inactivity, so a negative means "no
+record". `--negative-policy` selects how that is handled — `random` (reproduces
+the published v0.2 run), `covered` (only well-assayed peptides), or `matched`
+(composition- and length-matched to the positives, which drives the shortcut
+ceiling to chance).
 
 ## Training on experimental data
 

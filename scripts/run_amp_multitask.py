@@ -13,32 +13,23 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from collections import Counter
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from aster.control import metrics as M
-from aster.real.amp import load_amp_benchmark, AA
+from aster.real.amp import load_amp_benchmark
 from aster.real.embed import embed_sequences, embed_texts, pick_device
+from aster.real.ceilings import binomial_ci95, composition_ceiling, composition_matrix
 from aster.real.models import CrossAttentionAster, RealAster
 
-AA_LIST = sorted(AA)
-AA_INDEX = {a: i for i, a in enumerate(AA_LIST)}
+MIN_SAMPLES = 400
 
 
 def compute_composition(seqs: list[str]) -> np.ndarray:
-    """Compute 20-dim amino acid frequency vector."""
-    mat = np.zeros((len(seqs), 20), dtype=np.float32)
-    for i, s in enumerate(seqs):
-        counts = Counter(s)
-        n = max(1, len(s))
-        for a, cnt in counts.items():
-            if a in AA_INDEX:
-                mat[i, AA_INDEX[a]] = cnt / n
-    return mat
+    """20-dim amino-acid frequency vector (shared with the ceiling estimator)."""
+    return composition_matrix(seqs).astype(np.float32)
 
 
 def build_tensor_dict(examples, X, Q, A, task_to_id, device):
@@ -111,11 +102,25 @@ def main():
     parser.add_argument("--max-peptides", type=int, default=None, help="Cap unique peptides for rapid ESM caching")
     parser.add_argument("--device", default="auto")
     parser.add_argument("--out", default="reports/amp_multitask_results.json")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--negative-policy",
+        default="random",
+        choices=["random", "covered"],
+        help=(
+            "How presumed-negative rows are drawn. 'random' reproduces the "
+            "published v0.2 run; 'covered' restricts them to peptides assayed "
+            "against several other pathogens, so absence is less likely to be "
+            "database coverage rather than measured inactivity."
+        ),
+    )
     args = parser.parse_args()
 
     device = pick_device(args.device)
     print(f"Loading 56-pathogen AMP multi-task dataset on {device}...")
-    examples, meta = load_amp_benchmark(min_samples=400)
+    examples, meta = load_amp_benchmark(
+        min_samples=MIN_SAMPLES, seed=args.seed, negative_policy=args.negative_policy
+    )
 
     unique_seqs = sorted({e.sequence for e in examples})
     if args.max_peptides and len(unique_seqs) > args.max_peptides:
@@ -183,25 +188,23 @@ def main():
     d_text = q_embs_mat.shape[1]
     n_tasks = len(train_tasks)
 
-    # Calculate composition baseline & shortcut ceilings per held-out task
+    # Shortcut ceilings on the held-out tasks. The ceiling, not chance and not
+    # the lookup floor, is the zero every claim below is measured against.
     print("\n--- Measuring Baselines & Ceilings on Held-Out Tasks ---")
     ceilings = {}
     for task in held_out_tasks:
         sub = [e for e in test_ex if e.task == task]
         labels = np.array([e.label for e in sub])
-        maj_acc = max(np.mean(labels == 1), np.mean(labels == 0))
-        # Logistic regression on composition for this task
-        comp_X = compute_composition([e.sequence for e in sub])
-        # Linear probe on composition
-        w, _, _, _ = np.linalg.lstsq(comp_X, (labels * 2 - 1), rcond=None)
-        comp_preds = (comp_X @ w > 0).astype(int)
-        comp_acc = float(np.mean(comp_preds == labels))
-        ceilings[task] = {
-            "majority": float(maj_acc),
-            "composition": float(comp_acc),
-            "ceiling": float(max(maj_acc, comp_acc)),
-        }
-        print(f"  {task:16s} | Majority: {maj_acc:.3f} | Comp ceiling: {comp_acc:.3f}")
+        ceilings[task] = composition_ceiling(
+            [e.sequence for e in sub], labels, folds=5, seed=args.seed
+        )
+        c = ceilings[task]
+        print(
+            f"  {task:16s} | n={c['n']:5d} | Majority: {c['majority']:.3f} "
+            f"| Comp (out-of-fold): {c['composition_oof']:.3f} "
+            f"(in-sample {c['composition_insample']:.3f}) "
+            f"| Ceiling: {c['ceiling']:.3f} +/-{c['ceiling_ci95']:.3f}"
+        )
 
     results = {}
     models_to_test = [
@@ -236,7 +239,12 @@ def main():
             task_lift = task_acc - ceilings[task]["ceiling"]
             per_task[task] = {
                 "acc": task_acc,
+                "acc_ci95": binomial_ci95(task_acc, len(idx)),
                 "lift": task_lift,
+                "lift_is_significant": bool(
+                    abs(task_lift) > binomial_ci95(task_acc, len(idx))
+                    + ceilings[task]["ceiling_ci95"]
+                ),
             }
 
         results[name] = {
@@ -251,6 +259,23 @@ def main():
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "w") as f:
         json.dump({
+            "config": {
+                "command": " ".join(sys.argv),
+                "esm": args.esm,
+                "epochs": args.epochs,
+                "max_peptides": args.max_peptides,
+                "min_samples": MIN_SAMPLES,
+                "seed": args.seed,
+                "negative_policy": args.negative_policy,
+                "n_train": len(train_ex),
+                "n_val": len(val_ex),
+                "n_test": len(test_ex),
+            },
+            "reporting_rule": (
+                "Every claim is a margin over 'ceiling' (max of majority and the "
+                "out-of-fold composition probe), never over task_id. A lift smaller "
+                "than the combined 95% intervals is not a result."
+            ),
             "held_out_tasks": held_out_tasks,
             "ceilings": ceilings,
             "results": results,

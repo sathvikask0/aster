@@ -8,29 +8,49 @@
   ],
   "ceilings": {
     "B.cereus": {
+      "n": 586,
       "majority": 0.5,
-      "composition": 0.6143344709897611,
-      "ceiling": 0.6143344709897611
+      "composition_oof": 0.5750853242320819,
+      "composition_insample": 0.6109215017064846,
+      "ceiling": 0.5750853242320819,
+      "ceiling_ci95": 0.04002434849375413,
+      "estimator": "logreg(standardized 20-dim AA freq), 5-fold out-of-fold"
     },
     "C.albicans": {
+      "n": 585,
       "majority": 0.5025641025641026,
-      "composition": 0.7333333333333333,
-      "ceiling": 0.7333333333333333
+      "composition_oof": 0.7213675213675214,
+      "composition_insample": 0.7384615384615385,
+      "ceiling": 0.7213675213675214,
+      "ceiling_ci95": 0.036330577381476464,
+      "estimator": "logreg(standardized 20-dim AA freq), 5-fold out-of-fold"
     },
     "K.pneumoniae": {
+      "n": 1524,
       "majority": 0.5039370078740157,
-      "composition": 0.5741469816272966,
-      "ceiling": 0.5741469816272966
+      "composition_oof": 0.5544619422572179,
+      "composition_insample": 0.571522309711286,
+      "ceiling": 0.5544619422572179,
+      "ceiling_ci95": 0.024954097204098948,
+      "estimator": "logreg(standardized 20-dim AA freq), 5-fold out-of-fold"
     },
     "S.epidermidis": {
+      "n": 1464,
       "majority": 0.5129781420765027,
-      "composition": 0.619535519125683,
-      "ceiling": 0.619535519125683
+      "composition_oof": 0.601775956284153,
+      "composition_insample": 0.619535519125683,
+      "ceiling": 0.601775956284153,
+      "ceiling_ci95": 0.02507648655871891,
+      "estimator": "logreg(standardized 20-dim AA freq), 5-fold out-of-fold"
     },
     "S.typhimurium": {
+      "n": 985,
       "majority": 0.5177664974619289,
-      "composition": 0.5776649746192893,
-      "ceiling": 0.5776649746192893
+      "composition_oof": 0.5492385786802031,
+      "composition_insample": 0.5736040609137056,
+      "ceiling": 0.5492385786802031,
+      "ceiling_ci95": 0.031073619483673254,
+      "estimator": "logreg(standardized 20-dim AA freq), 5-fold out-of-fold"
     }
   },
   "results": {
@@ -39,125 +59,201 @@
       "per_task": {
         "B.cereus": {
           "acc": 0.5307167235494881,
-          "lift": -0.08361774744027306
+          "lift": -0.04436860068259385,
+          "acc_ci95": 0.04040696102735251,
+          "lift_is_significant": false
         },
         "C.albicans": {
           "acc": 0.48547008547008547,
-          "lift": -0.24786324786324782
+          "lift": -0.2358974358974359,
+          "acc_ci95": 0.04050090148816563,
+          "lift_is_significant": true
         },
         "K.pneumoniae": {
           "acc": 0.5761154855643045,
-          "lift": 0.0019685039370078705
+          "lift": 0.021653543307086576,
+          "acc_ci95": 0.024810878261256893,
+          "lift_is_significant": false
         },
         "S.epidermidis": {
           "acc": 0.5901639344262295,
-          "lift": -0.029371584699453557
+          "lift": -0.011612021857923538,
+          "acc_ci95": 0.0251928298042392,
+          "lift_is_significant": false
         },
         "S.typhimurium": {
           "acc": 0.5279187817258884,
-          "lift": -0.04974619289340099
+          "lift": -0.02131979695431474,
+          "acc_ci95": 0.031176680611041716,
+          "lift_is_significant": false
         }
-      }
+      },
+      "overall_lift_vs_task_id": 0.054237947122861674,
+      "mean_lift_vs_ceiling": -0.05830886241703629,
+      "tasks_above_ceiling": 1
     },
     "dual_dot": {
       "overall_accuracy": 0.5373250388802489,
       "per_task": {
         "B.cereus": {
           "acc": 0.5017064846416383,
-          "lift": -0.11262798634812288
+          "lift": -0.07337883959044367,
+          "acc_ci95": 0.040483191070391306,
+          "lift_is_significant": false
         },
         "C.albicans": {
           "acc": 0.49743589743589745,
-          "lift": -0.23589743589743584
+          "lift": -0.2239316239316239,
+          "acc_ci95": 0.04051748051439859,
+          "lift_is_significant": true
         },
         "K.pneumoniae": {
           "acc": 0.562992125984252,
-          "lift": -0.011154855643044637
+          "lift": 0.008530183727034069,
+          "acc_ci95": 0.02490344214991259,
+          "lift_is_significant": false
         },
         "S.epidermidis": {
           "acc": 0.5655737704918032,
-          "lift": -0.053961748633879814
+          "lift": -0.036202185792349795,
+          "acc_ci95": 0.025391489766123692,
+          "lift_is_significant": false
         },
         "S.typhimurium": {
           "acc": 0.500507614213198,
-          "lift": -0.07715736040609134
+          "lift": -0.04873096446700509,
+          "acc_ci95": 0.03122538031414448,
+          "lift_is_significant": false
         }
-      }
+      },
+      "overall_lift_vs_task_id": 0.036158631415241116,
+      "mean_lift_vs_ceiling": -0.07474268601087768,
+      "tasks_above_ceiling": 1
     },
     "task_id": {
       "overall_accuracy": 0.5011664074650077,
       "per_task": {
         "B.cereus": {
           "acc": 0.5,
-          "lift": -0.11433447098976113
+          "lift": -0.07508532423208192,
+          "acc_ci95": 0.04048342685382935,
+          "lift_is_significant": false
         },
         "C.albicans": {
           "acc": 0.5025641025641026,
-          "lift": -0.23076923076923073
+          "lift": -0.2188034188034188,
+          "acc_ci95": 0.04051748051439859,
+          "lift_is_significant": true
         },
         "K.pneumoniae": {
           "acc": 0.5039370078740157,
-          "lift": -0.07020997375328086
+          "lift": -0.05052493438320216,
+          "acc_ci95": 0.025102682238456145,
+          "lift_is_significant": true
         },
         "S.epidermidis": {
           "acc": 0.4870218579234973,
-          "lift": -0.13251366120218577
+          "lift": -0.11475409836065575,
+          "acc_ci95": 0.025604080838411303,
+          "lift_is_significant": true
         },
         "S.typhimurium": {
           "acc": 0.5177664974619289,
-          "lift": -0.05989847715736041
+          "lift": -0.03147208121827416,
+          "acc_ci95": 0.031205677684999593,
+          "lift_is_significant": false
         }
-      }
+      },
+      "overall_lift_vs_task_id": 0.0,
+      "mean_lift_vs_ceiling": -0.09812797139952656,
+      "tasks_above_ceiling": 0
     },
     "question_only": {
       "overall_accuracy": 0.4988335925349922,
       "per_task": {
         "B.cereus": {
           "acc": 0.5,
-          "lift": -0.11433447098976113
+          "lift": -0.07508532423208192,
+          "acc_ci95": 0.04048342685382935,
+          "lift_is_significant": false
         },
         "C.albicans": {
           "acc": 0.49743589743589745,
-          "lift": -0.23589743589743584
+          "lift": -0.2239316239316239,
+          "acc_ci95": 0.04051748051439859,
+          "lift_is_significant": true
         },
         "K.pneumoniae": {
           "acc": 0.49606299212598426,
-          "lift": -0.07808398950131235
+          "lift": -0.05839895013123364,
+          "acc_ci95": 0.025102682238456145,
+          "lift_is_significant": true
         },
         "S.epidermidis": {
           "acc": 0.5129781420765027,
-          "lift": -0.10655737704918034
+          "lift": -0.08879781420765032,
+          "acc_ci95": 0.025604080838411303,
+          "lift_is_significant": true
         },
         "S.typhimurium": {
           "acc": 0.48223350253807107,
-          "lift": -0.09543147208121827
+          "lift": -0.06700507614213203,
+          "acc_ci95": 0.031205677684999593,
+          "lift_is_significant": true
         }
-      }
+      },
+      "overall_lift_vs_task_id": -0.0023328149300155254,
+      "mean_lift_vs_ceiling": -0.10264375772894437,
+      "tasks_above_ceiling": 0
     },
     "entity_only": {
       "overall_accuracy": 0.5332426127527217,
       "per_task": {
         "B.cereus": {
           "acc": 0.5068259385665529,
-          "lift": -0.10750853242320824
+          "lift": -0.06825938566552903,
+          "acc_ci95": 0.04047965415401534,
+          "lift_is_significant": false
         },
         "C.albicans": {
           "acc": 0.5384615384615384,
-          "lift": -0.19487179487179485
+          "lift": -0.18290598290598292,
+          "acc_ci95": 0.0403979596625195,
+          "lift_is_significant": true
         },
         "K.pneumoniae": {
           "acc": 0.536745406824147,
-          "lift": -0.03740157480314965
+          "lift": -0.017716535433070946,
+          "acc_ci95": 0.0250355780428115,
+          "lift_is_significant": false
         },
         "S.epidermidis": {
           "acc": 0.5635245901639344,
-          "lift": -0.05601092896174864
+          "lift": -0.03825136612021862,
+          "acc_ci95": 0.02540515562523392,
+          "lift_is_significant": false
         },
         "S.typhimurium": {
           "acc": 0.4954314720812183,
-          "lift": -0.08223350253807105
+          "lift": -0.0538071065989848,
+          "acc_ci95": 0.03122409294034155,
+          "lift_is_significant": false
         }
-      }
+      },
+      "overall_lift_vs_task_id": 0.03207620528771393,
+      "mean_lift_vs_ceiling": -0.07218807534475727,
+      "tasks_above_ceiling": 0
     }
+  },
+  "reporting_rule": "Every claim is a margin over 'ceiling' (max of majority and the out-of-fold composition probe), never over task_id. A lift smaller than the combined 95% intervals is not a result.",
+  "config": {
+    "command": "python scripts/run_amp_multitask.py --esm 8M --max-peptides 4000",
+    "esm": "8M",
+    "max_peptides": 4000,
+    "min_samples": 400,
+    "seed": 42,
+    "negative_policy": "random",
+    "n_test": 5144,
+    "ceilings_recomputed_by": "scripts/recompute_ceilings.py"
   }
 }

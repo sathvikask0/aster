@@ -283,6 +283,37 @@
     .tag-wrong { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
     .tag-clean { background: rgba(20, 184, 166, 0.15); color: #2dd4bf; }
     .tag-decisive { background: rgba(244, 63, 94, 0.18); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.3); }
+    .tag-running { background: rgba(139, 92, 246, 0.18); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.35); }
+    .tag-queued { background: rgba(100, 116, 139, 0.15); color: #94a3b8; }
+    .tag-partial { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+
+    .correction {
+      border-left: 3px solid var(--negative);
+      background: var(--negative-dim);
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin: 1.5rem 0 2rem;
+      font-size: 0.95rem;
+      color: #e2e8f0;
+    }
+
+    .correction strong { color: #fda4af; }
+
+    .pulse-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent);
+      display: inline-block;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+    .zero-note {
+      font-size: 0.875rem;
+      color: var(--text-dim);
+      margin-top: 0.75rem;
+    }
 
     .exp-title {
       font-weight: 600;
@@ -390,6 +421,8 @@
         <span>Dataset: <a href="https://huggingface.co/datasets/ChatterjeeLab/PeptiVerse_data" target="_blank" rel="noopener">PeptiVerse (ChatterjeeLab)</a></span>
         <span>·</span>
         <span>Backbone: ESM-2 8M + MiniLM-L6-v2</span>
+        <span>·</span>
+        <span><a href="#currently-running">Currently running →</a></span>
       </div>
     </header>
 
@@ -666,26 +699,22 @@
       </p>
     </section>
 
-    <!-- What would make the claim testable -->
-    <section id="future-tests">
-      <h2>What would make the claim testable</h2>
-      <p>
-        More distinct properties, and nothing else. Conjunctive questions were the obvious route — the trick that made the synthetic regime work — but task overlap is 186 peptides for hemolysis and penetrance, and 2 for hemolysis and solubility. Almost nothing carries labels on two properties, so there are no conjunctions to form.
-      </p>
-      <p>
-        That leaves a chemical encoder for the three SMILES-only tasks, which would reach six, or additional datasets entirely. Aster's transfer claim is not testable on PeptiVerse alone, and no amount of model work changes that.
-      </p>
-    </section>
-
-    <!-- Resolution & Breakthrough: Aster v0.2 -->
+    <!-- Resolution & Correction: Aster v0.2 -->
     <section id="resolution" style="border-top: 1px solid var(--surface-border); padding-top: 3.5rem;">
-      <div class="badge" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #6ee7b7;">
-        <span class="badge-dot" style="background: #10b981; box-shadow: 0 0 10px #10b981;"></span>
-        Resolution · Aster v0.2 · Multi-Task Benchmark
+      <div class="badge" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">
+        <span class="badge-dot" style="background: #f59e0b; box-shadow: 0 0 10px #f59e0b;"></span>
+        Half a resolution · Aster v0.2 · Multi-Task Benchmark
       </div>
       <h2>Breaking the Rank-3 Trap</h2>
       <p class="section-desc">Task scaling (21 pathogen assays), mechanistic biophysical prompts, and residue cross-attention.</p>
-      
+
+      <div class="correction">
+        <strong>Correction, 27 September 2026.</strong> This section originally headlined
+        &ldquo;+0.054 over the lookup floor&rdquo; and called it positive transfer. That is the wrong zero,
+        and the ceiling it was compared against was additionally fitted on the same rows it scored.
+        Both are fixed below. The verdict changes from <em>resolution</em> to <em>half a resolution</em>.
+      </div>
+
       <p>
         The negative result above established that 3 atomic questions are unidentifiable from a 3-entry lookup table. In v0.2, Aster scales to <strong>21 distinct microbial target assays</strong> curated from 7 public databases (64,602 associations) with 5 held-out targets spanning Gram-negative, Gram-positive, and fungal membrane barriers.
       </p>
@@ -694,73 +723,343 @@
         Questions were reformulated from atomic names to <strong>mechanistic biophysical prompts</strong> (specifying LPS outer membrane disruption, thick peptidoglycan penetration, and chitin/ergosterol binding), and the rigid pooled dot product was replaced with <strong>Multi-Head Cross-Attention</strong> (<code>CrossAttentionAster</code>) allowing prompt tokens to query peptide feature subspaces.
       </p>
 
+      <h3 style="margin-top: 2rem;">Two zeros, and they disagree</h3>
+      <p>
+        <strong>task_id</strong> is the lookup floor — structurally chance on an unseen task. Beating it says the text tower is no longer a lookup table.
+        <strong>ceiling</strong> is <code>max(majority, composition probe)</code>, where the probe is a logistic regression on 20-dimensional amino-acid frequencies scored <em>out of fold</em>. Beating it says the model knows something a bag of amino acids does not. That is the real zero.
+      </p>
+
       <div class="table-wrapper">
         <table>
           <thead>
             <tr>
               <th>Model</th>
-              <th>Architecture</th>
-              <th>Overall Held-Out Acc</th>
-              <th>vs lookup (floor)</th>
-              <th>K. pneumoniae</th>
-              <th>S. epidermidis</th>
-              <th>B. cereus</th>
+              <th>Overall</th>
+              <th>vs lookup floor</th>
+              <th>Mean lift vs ceiling</th>
+              <th>Above ceiling</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td class="model-name">cross_attention</td>
-              <td>ESM-2 + Mechanistic MHA</td>
               <td class="num">0.555</td>
               <td class="delta-pos">+0.054</td>
-              <td class="num">0.576 <span class="delta-pos">(+0.002)</span></td>
-              <td class="num">0.590</td>
-              <td class="num">0.531</td>
+              <td class="delta-neg">&minus;0.058</td>
+              <td class="num">1 / 5</td>
             </tr>
             <tr>
               <td class="model-name">dual_dot</td>
-              <td>ESM-2 + Pooled Dot-Product</td>
               <td class="num">0.537</td>
               <td class="delta-pos">+0.036</td>
-              <td class="num">0.563 (−0.011)</td>
-              <td class="num">0.566</td>
-              <td class="num">0.502</td>
+              <td class="delta-neg">&minus;0.075</td>
+              <td class="num">1 / 5</td>
             </tr>
             <tr>
               <td class="model-name">entity_only</td>
-              <td>Peptide prior shortcut</td>
               <td class="num">0.533</td>
               <td class="delta-pos">+0.032</td>
-              <td class="num">0.537</td>
-              <td class="num">0.564</td>
-              <td class="num">0.507</td>
+              <td class="delta-neg">&minus;0.072</td>
+              <td class="num">0 / 5</td>
             </tr>
             <tr>
               <td class="model-name">task_id</td>
-              <td>Lookup table floor</td>
               <td class="num">0.501</td>
               <td class="num">0.000</td>
-              <td class="num">0.504 (−0.070)</td>
-              <td class="num">0.487</td>
-              <td class="num">0.500</td>
+              <td class="delta-neg">&minus;0.098</td>
+              <td class="num">0 / 5</td>
             </tr>
             <tr>
               <td class="model-name">question_only</td>
-              <td>Label prior shortcut</td>
               <td class="num">0.499</td>
-              <td class="delta-neg">−0.002</td>
-              <td class="num">0.496</td>
-              <td class="num">0.513</td>
-              <td class="num">0.500</td>
+              <td class="delta-neg">&minus;0.002</td>
+              <td class="delta-neg">&minus;0.103</td>
+              <td class="num">0 / 5</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div class="highlight-card" style="border-color: rgba(16, 185, 129, 0.4); background: linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, rgba(17, 19, 26, 0.95) 100%);">
-        <div class="highlight-stat" style="color: #6ee7b7;">cross_attn 0.555 vs task_id 0.501 (+0.054)</div>
+      <p class="zero-note">5,144 held-out pairs across 5 unseen pathogens. ESM-2 8M + MiniLM-L6-v2, one seed.</p>
+
+      <h3 style="margin-top: 2rem;">cross_attention, per held-out target</h3>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Target</th>
+              <th>Class</th>
+              <th>n</th>
+              <th>Ceiling</th>
+              <th>Accuracy</th>
+              <th>Lift</th>
+              <th>Beyond noise?</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="model-name">K. pneumoniae</td>
+              <td>Gram-negative</td>
+              <td class="num">1,524</td>
+              <td class="num">0.554</td>
+              <td class="num">0.576 &plusmn; 0.025</td>
+              <td class="delta-pos">+0.022</td>
+              <td>no</td>
+            </tr>
+            <tr>
+              <td class="model-name">S. epidermidis</td>
+              <td>Gram-positive</td>
+              <td class="num">1,464</td>
+              <td class="num">0.602</td>
+              <td class="num">0.590 &plusmn; 0.025</td>
+              <td class="delta-neg">&minus;0.012</td>
+              <td>no</td>
+            </tr>
+            <tr>
+              <td class="model-name">S. typhimurium</td>
+              <td>Gram-negative</td>
+              <td class="num">985</td>
+              <td class="num">0.549</td>
+              <td class="num">0.528 &plusmn; 0.031</td>
+              <td class="delta-neg">&minus;0.021</td>
+              <td>no</td>
+            </tr>
+            <tr>
+              <td class="model-name">B. cereus</td>
+              <td>Gram-positive</td>
+              <td class="num">586</td>
+              <td class="num">0.575</td>
+              <td class="num">0.531 &plusmn; 0.040</td>
+              <td class="delta-neg">&minus;0.044</td>
+              <td>no</td>
+            </tr>
+            <tr>
+              <td class="model-name">C. albicans</td>
+              <td>Fungal</td>
+              <td class="num">585</td>
+              <td class="num">0.721</td>
+              <td class="num">0.485 &plusmn; 0.041</td>
+              <td class="delta-neg">&minus;0.236</td>
+              <td>yes</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="highlight-card">
+        <div class="highlight-stat">Lookup floor cleared. Shortcut ceiling not cleared.</div>
         <div class="highlight-text">
-          The lookup equivalence is broken. With 16 training tasks and mechanistic prompt terms, cross-attention beats the lookup floor by +5.4% and achieves positive transfer (+0.002 over ceiling on K. pneumoniae) where task_id fails (−0.070).
+          cross_attention beats task_id by +0.054, so task scaling and shared mechanism vocabulary gave the text tower something a lookup row cannot represent &mdash; that part of v0.2 holds. Against the ceiling the mean lift is &minus;0.058, four of five targets sit below a 20-dimensional bag of amino acids, and the one positive lift is inside the intervals. entity_only reaches 0.533 without ever seeing the question. <strong>The architecture question is answered; the biology question is not.</strong>
+        </div>
+      </div>
+    </section>
+
+    <!-- Experiments completed -->
+    <section id="experiments-done" style="border-top: 1px solid var(--surface-border); padding-top: 3.5rem;">
+      <h2>Experiments completed</h2>
+      <p class="section-desc">Every run so far, and what each one settled</p>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Experiment</th>
+              <th>Verdict</th>
+              <th>What it settled</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="model-name">Arc virtual cell sample</td>
+              <td><span class="exp-tag tag-unusable">Unusable</span></td>
+              <td>99.94% of labels are &ldquo;no change&rdquo; and 5 target genes means 5 questions. Plumbing test only.</td>
+            </tr>
+            <tr>
+              <td class="model-name">Synthetic control rig</td>
+              <td><span class="exp-tag tag-passed">Passed</span></td>
+              <td>16/16 pre-registered checks. The harness transfers when transfer is possible (+0.96) and not when it isn't (&minus;0.09). The instrument works.</td>
+            </tr>
+            <tr>
+              <td class="model-name">Entity-only shortcut discovery</td>
+              <td><span class="exp-tag tag-wrong">Expectation was wrong</span></td>
+              <td>A pre-registered expectation failed at +0.204. Shortcut level is now measured per split instead of assumed.</td>
+            </tr>
+            <tr>
+              <td class="model-name">PeptiVerse, 3 tasks (v0.1)</td>
+              <td><span class="exp-tag tag-decisive">Decisive</span></td>
+              <td>dual &asymp; task_id. Three questions in a 384-d space are 2 degrees of freedom; the text encoder became an expensive one-hot.</td>
+            </tr>
+            <tr>
+              <td class="model-name">AMP multi-task, 21 assays (v0.2)</td>
+              <td><span class="exp-tag tag-partial">Half a resolution</span></td>
+              <td>Lookup floor cleared (+0.054). Composition ceiling not cleared (mean &minus;0.058, 1/5 targets above, and that one inside the intervals).</td>
+            </tr>
+            <tr>
+              <td class="model-name">Ceiling re-derivation</td>
+              <td><span class="exp-tag tag-finding">Correction</span></td>
+              <td>The v0.2 ceilings were fitted in sample, inflating them by 0.012&ndash;0.039. Now scored out of fold, in one shared module.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Currently running -->
+    <section id="currently-running" style="border-top: 1px solid var(--surface-border); padding-top: 3.5rem;">
+      <div class="badge" style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.35); color: #c4b5fd;">
+        <span class="pulse-dot"></span>
+        In progress &middot; Aster v0.3
+      </div>
+      <h2>Make the shortcut impossible, then see what's left</h2>
+      <p class="section-desc">Design frozen &middot; pre-check run &middot; model comparison pending</p>
+
+      <p>
+        Every number above is measured against a ceiling high enough to swallow the effect being measured. Positives are real antimicrobial peptides; negatives are peptides with no record for that target, drawn at random. The two pools differ in bulk composition, so <em>&ldquo;is this peptide cationic and amphipathic?&rdquo;</em> answers most of the benchmark without reading the prompt &mdash; on <em>C. albicans</em>, to 0.721.
+      </p>
+
+      <p>
+        The fix is not a better model. It is a benchmark where the shortcut does not exist. Each positive claims its nearest unused negative in composition-and-length space, greedily, with a caliper &mdash; so a bag-of-amino-acids probe is at chance <strong>by construction</strong>, and anything left must come from residue order and prompt semantics.
+      </p>
+
+      <h3 style="margin-top: 2rem;">Pre-check: the matching does what it claims</h3>
+      <p>Held-out composition ceilings, out of fold, under each negative policy:</p>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Target</th>
+              <th><code>random</code> (v0.2)</th>
+              <th><code>covered</code></th>
+              <th><code>matched</code></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="model-name">C. albicans</td><td class="num">0.721</td><td class="num">0.750</td><td class="num delta-pos">0.522</td></tr>
+            <tr><td class="model-name">S. epidermidis</td><td class="num">0.602</td><td class="num">0.605</td><td class="num delta-pos">0.513</td></tr>
+            <tr><td class="model-name">B. cereus</td><td class="num">0.575</td><td class="num">0.588</td><td class="num delta-pos">0.540</td></tr>
+            <tr><td class="model-name">K. pneumoniae</td><td class="num">0.554</td><td class="num">0.557</td><td class="num delta-pos">0.531</td></tr>
+            <tr><td class="model-name">S. typhimurium</td><td class="num">0.549</td><td class="num">0.553</td><td class="num delta-pos">0.517</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="zero-note">
+        Restricting negatives to well-assayed peptides (<code>covered</code>) slightly <em>raises</em> the ceiling &mdash; worth knowing before reaching for it as a fix on its own.
+      </p>
+
+      <h3 style="margin-top: 2rem;">Pre-registered outcomes</h3>
+      <p>Written before the run, so the result cannot be re-read into a success.</p>
+
+      <div class="timeline">
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">A</span>
+            <span class="exp-title">Clears the matched ceiling on &ge;3 of 5 targets</span>
+          </div>
+          <div class="exp-body">The premise survives its first honest test. The text tower carries transferable biology.</div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">B</span>
+            <span class="exp-title">Positive but inside the intervals</span>
+          </div>
+          <div class="exp-body">Undecided. Needs seed variance and more held-out targets, not a louder claim.</div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">C</span>
+            <span class="exp-title">cross_attention &asymp; entity_only</span>
+          </div>
+          <div class="exp-body">Whatever the model knows, it is not coming from the question. The v0.2 gain was composition.</div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">D</span>
+            <span class="exp-title">Everything collapses to chance</span>
+          </div>
+          <div class="exp-body">The benchmark's signal <em>was</em> the shortcut. This dataset cannot test the premise and a different data source is required. A live possibility &mdash; and the reason the run is worth doing.</div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">E</span>
+            <span class="exp-title">Mechanism-swap leaves accuracy unchanged</span>
+          </div>
+          <div class="exp-body">Give each held-out target the wrong mechanism prompt &mdash; the fungal chitin prompt for a Gram-negative target. If nothing moves, the prompts are task ids spelled in English, whatever the accuracy says.</div>
+        </div>
+      </div>
+
+      <p style="margin-top: 1.5rem;">
+        Full design and limitations: <a href="https://github.com/sathvikask0/aster/blob/main/reports/IN_PROGRESS_01.md" target="_blank" rel="noopener" style="color: #a78bfa;">reports/IN_PROGRESS_01.md</a>
+      </p>
+    </section>
+
+    <!-- Experiments of the future -->
+    <section id="future-experiments" style="border-top: 1px solid var(--surface-border); padding-top: 3.5rem;">
+      <h2>Experiments of the future</h2>
+      <p class="section-desc">Queued, in the order they would change the most</p>
+
+      <div class="timeline">
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">01</span>
+            <span class="exp-tag tag-queued">Queued</span>
+            <span class="exp-title">Data with measured inactives</span>
+          </div>
+          <div class="exp-body">
+            Every negative in this project is <strong>presumed</strong>: the source tables record reported activity and never recorded inactivity, so a negative means &ldquo;no record&rdquo;, which is partly a statement about what anyone assayed. Matching removes a confound; it does not create a measured negative. The clean answer needs MIC tables with upper bounds rather than lists of hits.
+          </div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">02</span>
+            <span class="exp-tag tag-queued">Queued</span>
+            <span class="exp-title">Seed variance and split variance</span>
+          </div>
+          <div class="exp-body">
+            Every number published so far is one seed on one split, with binomial intervals that ignore peptide-level correlation. Before any lift is called real it needs to survive re-drawing both, and the held-out targets need to rotate rather than stay fixed at five.
+          </div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">03</span>
+            <span class="exp-tag tag-queued">Queued</span>
+            <span class="exp-title">Does a larger protein backbone clear the ceiling?</span>
+          </div>
+          <div class="exp-body">
+            Everything here runs on ESM-2 8M. If matched negatives leave only residue-order signal, backbone capacity becomes the binding constraint, and 650M is the obvious next rung. Cheap to test, and it cleanly separates &ldquo;the premise is wrong&rdquo; from &ldquo;the encoder is too small.&rdquo;
+          </div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">04</span>
+            <span class="exp-tag tag-queued">Queued</span>
+            <span class="exp-title">Calibration and abstention under shift</span>
+          </div>
+          <div class="exp-body">
+            On unseen questions the v0.1 models were confidently wrong &mdash; expected calibration error of 0.22 to 0.32, overconfidence positive everywhere. For a model whose purpose is deciding what to test next, that is the failure that matters most. An abstention rule has to be validated under distribution shift; entropy alone is not evidence that a model knows when it is wrong.
+          </div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">05</span>
+            <span class="exp-tag tag-queued">Queued</span>
+            <span class="exp-title">Back to cells, with a real perturbation cohort</span>
+          </div>
+          <div class="exp-body">
+            The original first capability &mdash; will reducing one gene's activity raise or lower another gene's RNA? &mdash; is still untested, because the 600-cell Arc sample is 99.94% one label. It needs the full atlas or the filtered Replogle set, both of which need a licensing and provenance audit before a single training run.
+          </div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">06</span>
+            <span class="exp-tag tag-queued">Queued</span>
+            <span class="exp-title">Conjunctive questions, where the data allows</span>
+          </div>
+          <div class="exp-body">
+            Compositional questions are what made the synthetic regime transfer, and PeptiVerse could not supply them: task overlap is 186 peptides for hemolysis and penetrance, and 2 for hemolysis and solubility. The multi-pathogen data has the overlap that PeptiVerse lacked, so conjunctions across targets are now formable &mdash; and they are the sharpest available test of whether the text tower composes rather than memorizes.
+          </div>
         </div>
       </div>
     </section>
@@ -769,13 +1068,18 @@
     <section id="reproduce">
       <h2>Reproduction</h2>
       <div class="code-box">
-        <span id="cmd-amp">python scripts/run_amp_multitask.py --esm 8M</span>
+        <span id="cmd-amp">python scripts/run_amp_multitask.py --esm 8M --max-peptides 4000</span>
         <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('cmd-amp').innerText); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 2000)">Copy</button>
       </div>
 
       <div class="code-box">
         <span id="cmd-real">python scripts/run_peptiverse.py --root ~/peptiverse --esm 8M</span>
         <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('cmd-real').innerText); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 2000)">Copy</button>
+      </div>
+
+      <div class="code-box">
+        <span id="cmd-ceil">python scripts/recompute_ceilings.py reports/amp_multitask_results.json</span>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('cmd-ceil').innerText); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 2000)">Copy</button>
       </div>
 
       <div class="code-box">
