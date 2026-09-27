@@ -1,0 +1,390 @@
+{
+  "config": {
+    "root": "/Users/asksathvik/peptiverse",
+    "esm": "8M",
+    "text_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "device": "auto",
+    "batch_size": 16,
+    "epochs": 25,
+    "max_len": 256,
+    "keep_shared": false,
+    "tasks": [
+      "hemolysis",
+      "solubility",
+      "nephrotoxicity",
+      "penetrance"
+    ],
+    "no_class_weight": false,
+    "out": "reports/peptiverse_results.json"
+  },
+  "ceilings": {
+    "hemolysis": {
+      "majority": 0.7844557879137164,
+      "composition": 0.7836325082117508,
+      "ceiling": 0.7844557879137164
+    },
+    "penetrance": {
+      "majority": 0.5,
+      "composition": 0.7835628227194491,
+      "ceiling": 0.7835628227194491
+    },
+    "solubility": {
+      "majority": 0.5239256489459708,
+      "composition": 0.5828319093314525,
+      "ceiling": 0.5828319093314525
+    }
+  },
+  "in_distribution": {
+    "dual": {
+      "accuracy": 0.7145251396648045,
+      "ece": 0.011623305525933807,
+      "over_ceiling": 0.06779025007070816,
+      "per_task": {
+        "hemolysis": 0.8219727345629511,
+        "penetrance": 0.8446389496717724,
+        "solubility": 0.6617566830332787
+      }
+    },
+    "task_id": {
+      "accuracy": 0.7175046554934823,
+      "ece": 0.015359812832123494,
+      "over_ceiling": 0.070769765899386,
+      "per_task": {
+        "hemolysis": 0.8259823576583801,
+        "penetrance": 0.8402625820568927,
+        "solubility": 0.6653027823240589
+      }
+    },
+    "composition": {
+      "accuracy": 0.6294227188081937,
+      "ece": 0.022689274270772452,
+      "over_ceiling": -0.017312170785902636,
+      "per_task": {
+        "hemolysis": 0.7866880513231757,
+        "penetrance": 0.7964989059080962,
+        "solubility": 0.555100927441353
+      }
+    },
+    "question_only": {
+      "accuracy": 0.5523277467411546,
+      "ece": 0.06091207316588926,
+      "over_ceiling": -0.09440714285294172,
+      "per_task": {
+        "hemolysis": 0.7923015236567763,
+        "penetrance": 0.49671772428884026,
+        "solubility": 0.477632296781233
+      }
+    },
+    "entity_only": {
+      "accuracy": 0.41657355679702046,
+      "ece": 0.08342644320297954,
+      "over_ceiling": -0.23016133279707585,
+      "per_task": {
+        "hemolysis": 0.20769847634322375,
+        "penetrance": 0.49671772428884026,
+        "solubility": 0.477632296781233
+      }
+    }
+  },
+  "results": {
+    "hemolysis": {
+      "ceiling": {
+        "majority": 0.7844557879137164,
+        "composition": 0.7836325082117508,
+        "ceiling": 0.7844557879137164
+      },
+      "modes": {
+        "dual": {
+          "accuracy": 0.24551292606619463,
+          "over_ceiling": -0.5389428618475218,
+          "ece": 0.31907110681377954,
+          "overconfidence": 0.31899136460232574,
+          "temperature": 1.1608566849389348,
+          "n": 6073
+        },
+        "task_id": {
+          "accuracy": 0.21554421208628355,
+          "over_ceiling": -0.5689115758274328,
+          "ece": 0.28445578791371645,
+          "overconfidence": 0.28445578791371645,
+          "temperature": 1.1110307403154935,
+          "n": 6073
+        },
+        "composition": {
+          "accuracy": 0.3960151490202536,
+          "over_ceiling": -0.3884406388934628,
+          "ece": 0.13131153204183676,
+          "overconfidence": 0.13131153204183676,
+          "temperature": 1.0633434100359487,
+          "n": 6073
+        },
+        "question_only": {
+          "accuracy": 0.21554421208628355,
+          "over_ceiling": -0.5689115758274328,
+          "ece": 0.284832915713816,
+          "overconfidence": 0.284832915713816,
+          "temperature": 8.0,
+          "n": 6073
+        },
+        "entity_only": {
+          "accuracy": 0.21554421208628355,
+          "over_ceiling": -0.5689115758274328,
+          "ece": 0.28445578791371645,
+          "overconfidence": 0.28445578791371645,
+          "temperature": 0.25,
+          "n": 6073
+        }
+      }
+    },
+    "penetrance": {
+      "ceiling": {
+        "majority": 0.5,
+        "composition": 0.7835628227194491,
+        "ceiling": 0.7835628227194491
+      },
+      "modes": {
+        "dual": {
+          "accuracy": 0.4892426850258176,
+          "over_ceiling": -0.2943201376936315,
+          "ece": 0.2184740046928933,
+          "overconfidence": 0.21847400469289324,
+          "temperature": 1.324146999549009,
+          "n": 2324
+        },
+        "task_id": {
+          "accuracy": 0.5,
+          "over_ceiling": -0.2835628227194491,
+          "ece": 0.0,
+          "overconfidence": 0.0,
+          "temperature": 1.1110307403154935,
+          "n": 2324
+        },
+        "composition": {
+          "accuracy": 0.43373493975903615,
+          "over_ceiling": -0.34982788296041295,
+          "ece": 0.1764587360694403,
+          "overconfidence": 0.17645873606944024,
+          "temperature": 0.974021360549221,
+          "n": 2324
+        },
+        "question_only": {
+          "accuracy": 0.5,
+          "over_ceiling": -0.2835628227194491,
+          "ece": 0.09963119418736976,
+          "overconfidence": 0.09963119418736976,
+          "temperature": 1.0177029011328713,
+          "n": 2324
+        },
+        "entity_only": {
+          "accuracy": 0.5,
+          "over_ceiling": -0.2835628227194491,
+          "ece": 0.0,
+          "overconfidence": 0.0,
+          "temperature": 0.25,
+          "n": 2324
+        }
+      }
+    },
+    "solubility": {
+      "ceiling": {
+        "majority": 0.5239256489459708,
+        "composition": 0.5828319093314525,
+        "ceiling": 0.5828319093314525
+      },
+      "modes": {
+        "dual": {
+          "accuracy": 0.5325963258006828,
+          "over_ceiling": -0.05023558353076962,
+          "ece": 0.23445194215562912,
+          "overconfidence": 0.23445194215562903,
+          "temperature": 1.0633434100359487,
+          "n": 18453
+        },
+        "task_id": {
+          "accuracy": 0.4760743510540292,
+          "over_ceiling": -0.10675755827742328,
+          "ece": 0.023925648945970823,
+          "overconfidence": 0.023925648945970823,
+          "temperature": 1.0633434100359487,
+          "n": 18453
+        },
+        "composition": {
+          "accuracy": 0.5264726602720425,
+          "over_ceiling": -0.05635924905940992,
+          "ece": 0.24945583980522518,
+          "overconfidence": 0.24945583980522512,
+          "temperature": 0.7821784101969179,
+          "n": 18453
+        },
+        "question_only": {
+          "accuracy": 0.4760743510540292,
+          "over_ceiling": -0.10675755827742328,
+          "ece": 0.17542379989502954,
+          "overconfidence": 0.17542379989502954,
+          "temperature": 0.7486059816122705,
+          "n": 18453
+        },
+        "entity_only": {
+          "accuracy": 0.4760743510540292,
+          "over_ceiling": -0.10675755827742328,
+          "ece": 0.023925648945970823,
+          "overconfidence": 0.023925648945970823,
+          "temperature": 0.25,
+          "n": 18453
+        }
+      }
+    }
+  },
+  "rows": [
+    {
+      "held_out": "hemolysis",
+      "mode": "dual",
+      "accuracy": 0.24551292606619463,
+      "over_ceiling": -0.5389428618475218,
+      "ece": 0.31907110681377954,
+      "overconfidence": 0.31899136460232574,
+      "temperature": 1.1608566849389348,
+      "n": 6073
+    },
+    {
+      "held_out": "hemolysis",
+      "mode": "task_id",
+      "accuracy": 0.21554421208628355,
+      "over_ceiling": -0.5689115758274328,
+      "ece": 0.28445578791371645,
+      "overconfidence": 0.28445578791371645,
+      "temperature": 1.1110307403154935,
+      "n": 6073
+    },
+    {
+      "held_out": "hemolysis",
+      "mode": "composition",
+      "accuracy": 0.3960151490202536,
+      "over_ceiling": -0.3884406388934628,
+      "ece": 0.13131153204183676,
+      "overconfidence": 0.13131153204183676,
+      "temperature": 1.0633434100359487,
+      "n": 6073
+    },
+    {
+      "held_out": "hemolysis",
+      "mode": "question_only",
+      "accuracy": 0.21554421208628355,
+      "over_ceiling": -0.5689115758274328,
+      "ece": 0.284832915713816,
+      "overconfidence": 0.284832915713816,
+      "temperature": 8.0,
+      "n": 6073
+    },
+    {
+      "held_out": "hemolysis",
+      "mode": "entity_only",
+      "accuracy": 0.21554421208628355,
+      "over_ceiling": -0.5689115758274328,
+      "ece": 0.28445578791371645,
+      "overconfidence": 0.28445578791371645,
+      "temperature": 0.25,
+      "n": 6073
+    },
+    {
+      "held_out": "penetrance",
+      "mode": "dual",
+      "accuracy": 0.4892426850258176,
+      "over_ceiling": -0.2943201376936315,
+      "ece": 0.2184740046928933,
+      "overconfidence": 0.21847400469289324,
+      "temperature": 1.324146999549009,
+      "n": 2324
+    },
+    {
+      "held_out": "penetrance",
+      "mode": "task_id",
+      "accuracy": 0.5,
+      "over_ceiling": -0.2835628227194491,
+      "ece": 0.0,
+      "overconfidence": 0.0,
+      "temperature": 1.1110307403154935,
+      "n": 2324
+    },
+    {
+      "held_out": "penetrance",
+      "mode": "composition",
+      "accuracy": 0.43373493975903615,
+      "over_ceiling": -0.34982788296041295,
+      "ece": 0.1764587360694403,
+      "overconfidence": 0.17645873606944024,
+      "temperature": 0.974021360549221,
+      "n": 2324
+    },
+    {
+      "held_out": "penetrance",
+      "mode": "question_only",
+      "accuracy": 0.5,
+      "over_ceiling": -0.2835628227194491,
+      "ece": 0.09963119418736976,
+      "overconfidence": 0.09963119418736976,
+      "temperature": 1.0177029011328713,
+      "n": 2324
+    },
+    {
+      "held_out": "penetrance",
+      "mode": "entity_only",
+      "accuracy": 0.5,
+      "over_ceiling": -0.2835628227194491,
+      "ece": 0.0,
+      "overconfidence": 0.0,
+      "temperature": 0.25,
+      "n": 2324
+    },
+    {
+      "held_out": "solubility",
+      "mode": "dual",
+      "accuracy": 0.5325963258006828,
+      "over_ceiling": -0.05023558353076962,
+      "ece": 0.23445194215562912,
+      "overconfidence": 0.23445194215562903,
+      "temperature": 1.0633434100359487,
+      "n": 18453
+    },
+    {
+      "held_out": "solubility",
+      "mode": "task_id",
+      "accuracy": 0.4760743510540292,
+      "over_ceiling": -0.10675755827742328,
+      "ece": 0.023925648945970823,
+      "overconfidence": 0.023925648945970823,
+      "temperature": 1.0633434100359487,
+      "n": 18453
+    },
+    {
+      "held_out": "solubility",
+      "mode": "composition",
+      "accuracy": 0.5264726602720425,
+      "over_ceiling": -0.05635924905940992,
+      "ece": 0.24945583980522518,
+      "overconfidence": 0.24945583980522512,
+      "temperature": 0.7821784101969179,
+      "n": 18453
+    },
+    {
+      "held_out": "solubility",
+      "mode": "question_only",
+      "accuracy": 0.4760743510540292,
+      "over_ceiling": -0.10675755827742328,
+      "ece": 0.17542379989502954,
+      "overconfidence": 0.17542379989502954,
+      "temperature": 0.7486059816122705,
+      "n": 18453
+    },
+    {
+      "held_out": "solubility",
+      "mode": "entity_only",
+      "accuracy": 0.4760743510540292,
+      "over_ceiling": -0.10675755827742328,
+      "ece": 0.023925648945970823,
+      "overconfidence": 0.023925648945970823,
+      "temperature": 0.25,
+      "n": 18453
+    }
+  ]
+}
