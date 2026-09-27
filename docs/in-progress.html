@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>In progress: v0.3 · Aster</title>
+  <meta name="description" content="Composition-matched negatives, so the shortcut cannot exist. Pre-registered, not yet run." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <nav class="doc-nav">
+      <a href="index.html">Result</a>
+      <a href="state.html">State of the project</a>
+      <a href="rig.html">Control rig</a>
+      <a href="resolution.html">v0.2 benchmark</a>
+      <a href="in-progress.html" class="here">In progress</a>
+      <a href="milestone.html">Milestone 01</a>
+      <span class="spacer"></span>
+      <a href="https://github.com/sathvikask0/aster">GitHub</a>
+    </nav>
+    <article>
+      <h1>In progress: make the shortcut impossible, then see what's left</h1>
+      <p><strong>Aster v0.3 · design frozen 27 September 2026 · run pending</strong></p>
+      <p>Status: the data construction and the pre-check below have run. The model comparison has not — it needs ESM-2 embeddings, and the machine this was prepared on has no access to the weights. Nothing here is a result yet.</p>
+      <hr />
+      <h2>The question this experiment exists to answer</h2>
+      <p>v0.2 established two things that point in opposite directions. The text encoder stopped being a lookup table (+0.054 over <code>task_id</code>). And against the shortcut ceiling, the honest zero, the mean lift was <strong>−0.058</strong>, with 4 of 5 held-out targets below a 20-dimensional bag of amino acids.</p>
+      <p>Both can be true because the benchmark lets a model score well for a reason that has nothing to do with the question. Positives for a target are real antimicrobial peptides; negatives are peptides with no record for that target, drawn at random. Those two pools differ in bulk composition — cationic, more hydrophobic — so "is this peptide cationic and amphipathic?" answers most of the benchmark without reading the prompt. On <em>C. albicans</em> a composition probe reaches <strong>0.721</strong> that way.</p>
+      <p>So the number that decides whether Aster's premise is real — does encoding the question as language buy anything? — is measured against a ceiling high enough to swallow the entire effect. <strong>The fix is not a better model. It is a benchmark where the shortcut does not exist.</strong></p>
+      <hr />
+      <h2>Design</h2>
+      <p><strong>1. Composition-matched negatives.</strong> Each positive claims its nearest unused negative candidate in 21-dimensional space (20 amino-acid frequencies plus scaled length), greedily, hardest positives first, with a caliper of 0.35 — a positive with no candidate inside the caliper is dropped rather than paired with a distant one. Negatives are additionally drawn only from peptides with records against ≥3 other pathogens (<code>negative_policy="matched"</code>), so absence of a record is less likely to mean "never assayed".</p>
+      <p>The two classes then have near-identical composition, and a composition probe is at chance <strong>by construction</strong> — not as an empirical hope.</p>
+      <p><strong>2. Mechanism-swap ablation.</strong> At test time, give each held-out target the <em>wrong</em> mechanism prompt: the fungal chitin/ergosterol prompt for a Gram-negative target, the LPS prompt for the fungal one. If accuracy is unchanged, the prompt is functioning as a task identifier that happens to be spelled in English, and the mechanism language is decoration.</p>
+      <p><strong>3. Same five models, same held-out targets, same reading rule.</strong> <code>cross_attention</code>, <code>dual_dot</code>, <code>task_id</code>, <code>question_only</code>, <code>entity_only</code>; lift reported against the ceiling with binomial intervals; <code>task_id</code> shown only as the lookup floor, never as the zero.</p>
+      <hr />
+      <h2>Pre-check: the matching does what it claims</h2>
+      <p>Held-out composition ceilings, out of fold, under each negative policy:</p>
+      <div class="table-wrapper"><table><thead><tr><th>Held-out target</th><th><code>random</code> (v0.2)</th><th><code>covered</code></th><th><code>matched</code></th></tr></thead><tbody><tr><td><em>C. albicans</em></td><td>0.721</td><td>0.750</td><td><strong>0.522</strong></td></tr><tr><td><em>S. epidermidis</em></td><td>0.602</td><td>0.605</td><td><strong>0.513</strong></td></tr><tr><td><em>B. cereus</em></td><td>0.575</td><td>0.588</td><td><strong>0.540</strong></td></tr><tr><td><em>K. pneumoniae</em></td><td>0.554</td><td>0.557</td><td><strong>0.531</strong></td></tr><tr><td><em>S. typhimurium</em></td><td>0.549</td><td>0.553</td><td><strong>0.517</strong></td></tr></tbody></table></div>
+      <p>The shortcut is gone. Note that <code>covered</code> alone <em>raises</em> the ceiling slightly — restricting negatives to well-assayed peptides does not make the classes compositionally similar, which is worth knowing before anyone reaches for it as a fix on its own.</p>
+      <pre><code>python scripts/recompute_ceilings.py reports/amp_multitask_results.json \
+          --negative-policy matched</code></pre>
+      <hr />
+      <h2>Pre-registered outcomes</h2>
+      <p>Written before the run, so the result cannot be re-read into a success.</p>
+      <div class="table-wrapper"><table><thead><tr><th>Outcome</th><th>Reading</th></tr></thead><tbody><tr><td><code>cross_attention</code> clears the matched ceiling by more than the combined intervals, on ≥3 of 5 targets</td><td>The premise survives its first honest test. The text tower carries transferable biology.</td></tr><tr><td>Lift is positive but inside the intervals</td><td>Undecided. Needs seed variance and more held-out targets, not a louder claim.</td></tr><tr><td><code>cross_attention</code> ≈ <code>entity_only</code> on matched data</td><td>Whatever the model knows, it is not coming from the question. The v0.2 gain was composition.</td></tr><tr><td>Everything collapses to chance</td><td>The benchmark's signal <em>was</em> the shortcut. The dataset cannot test the premise and a different data source is required.</td></tr><tr><td>Mechanism-swap leaves accuracy unchanged</td><td>The prompts are task ids in English. Mechanistic wording bought nothing, whatever the accuracy says.</td></tr></tbody></table></div>
+      <p>The fourth row is a live possibility and is the reason this is worth running: after matching, the remaining signal must come from residue <em>order</em>, which is exactly what ESM-2 is supposed to provide and a composition vector cannot.</p>
+      <h2>What would still be wrong afterwards</h2>
+      <p>Matching removes a confound; it does not create measured negatives. Every label in this benchmark is still presence-or-absence in a literature table. A clean answer needs assay data with recorded inactives — an MIC table with upper bounds, not a list of hits.</p>
+    </article>
+
+    <footer>
+      <div>Source: <a href="https://github.com/sathvikask0/aster" target="_blank" rel="noopener">github.com/sathvikask0/aster</a></div>
+      <div>License: MIT · Aster Project</div>
+    </footer>
+  </main>
+</body>
+</html>

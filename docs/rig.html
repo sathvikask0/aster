@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Control rig · Aster</title>
+  <meta name="description" content="Testing the evaluation on synthetic data with known ground truth, before pointing it at biology." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <nav class="doc-nav">
+      <a href="index.html">Result</a>
+      <a href="state.html">State of the project</a>
+      <a href="rig.html" class="here">Control rig</a>
+      <a href="resolution.html">v0.2 benchmark</a>
+      <a href="in-progress.html">In progress</a>
+      <a href="milestone.html">Milestone 01</a>
+      <span class="spacer"></span>
+      <a href="https://github.com/sathvikask0/aster">GitHub</a>
+    </nav>
+    <article>
+      <h1>Control rig: testing the evaluation before trusting it</h1>
+      <p><code>python scripts/run_control.py</code> · <code>pytest tests/test_control.py</code> · ~15s CPU</p>
+      <div class="callout"><strong>Correction, 27 September 2026 — the <code>entity_only</code> control was broken.</strong> It set <code>v</code> to a constant, which makes every option score identical, so the model emitted the same answer for every row in the dataset. It could not use the entity at all. Whatever it scored was the split's label prior wearing the name of an entity shortcut: on <code>arbitrary</code>/<code>held_out_entity_family</code> it reported 0.602, and "always answer option 0" scores <strong>exactly 0.6021</strong> there. A control that cannot express the shortcut it is named after measures nothing while looking like a working control. It now gets a learned row per option and no question content, which is the shortcut it was always supposed to measure. All 16 checks still pass and every conclusion below survives — but the measured shortcut ceilings moved, some of them a lot, and the numbers in this document are the post-fix ones.</div>
+      <h2>Why this exists</h2>
+      <p>Aster's claim is that encoding the question with a text encoder buys generalization to questions the model never trained on. The failure mode is that the text encoder quietly degenerates into task identity — an expensive one-hot — which produces transfer-shaped numbers with no transfer behind them.</p>
+      <p>On a random split that failure is invisible. Accuracy looks great either way.</p>
+      <p>So before pointing the harness at real data, it is pointed at synthetic data whose ground truth we control, in two regimes:</p>
+      <div class="table-wrapper"><table><thead><tr><th>regime</th><th>question text</th><th>can anything generalize?</th></tr></thead><tbody><tr><td><code>semantic</code></td><td>compositionally determines the decision rule</td><td><strong>yes</strong> — unseen questions are new combinations of seen parts</td></tr><tr><td><code>arbitrary</code></td><td>opaque id; rule drawn independently</td><td><strong>no</strong> — chance is the ceiling, by construction</td></tr></tbody></table></div>
+      <p>A harness worth trusting reports transfer in the first and none in the second. <strong>If it reports transfer under <code>arbitrary</code>, the harness is broken</strong> and nothing it later says about peptides means anything.</p>
+      <h2>What runs</h2>
+      <p>Five models on four splits in both regimes.</p>
+      <p><strong>Models</strong> — one hypothesis, four ways of explaining it away:</p>
+      <ul><li><code>dual</code> — the hypothesis. entity → u, (question, answer) → v, score = ⟨u,v⟩.</li><li><code>task_id</code> — <strong>the control.</strong> Text encoder replaced by a lookup table. Unseen question → untrained <code>&lt;unk&gt;</code> row → chance. This is the transfer floor. If it ties <code>dual</code> on seen questions, the text encoder is not earning its parameters.</li><li><code>frozen_entity</code> — entity encoder not fine-tuned. How much comes from the entity side.</li><li><code>question_only</code> — never sees the entity. Whatever it scores is label prior.</li><li><code>entity_only</code> — never sees the question. The mirror shortcut.</li></ul>
+      <p><strong>Splits</strong> — the split <em>is</em> the experiment:</p>
+      <ul><li><code>random</code> — iid. Flatters everything, diagnoses nothing. Included to show that.</li><li><code>held_out_entity_family</code> — covariate shift on the entity side.</li><li><code>held_out_question</code> — unseen questions, parts seen in training.</li><li><code>held_out_both</code> — the honest one.</li></ul>
+      <p>Vocabularies are built from <strong>train only</strong> — letting test tokens in would hand unseen questions a trained embedding and manufacture transfer. Temperature is fit on a val set carved from <strong>train</strong>, never on test.</p>
+      <h2>Result</h2>
+      <p>16/16 pre-registered checks pass. The headline cells, as lift over chance (0 = guessing, 1 = perfect), calibrated:</p>
+      <div class="table-wrapper"><table><thead><tr><th></th><th><code>semantic</code> held_out_question</th><th><code>arbitrary</code> held_out_question</th></tr></thead><tbody><tr><td><code>dual</code></td><td><strong>+0.96</strong></td><td><strong>−0.09</strong></td></tr><tr><td><code>task_id</code></td><td>−0.01</td><td>−0.01</td></tr><tr><td><code>question_only</code></td><td>+0.07</td><td>−0.01</td></tr><tr><td><code>entity_only</code></td><td>+0.06</td><td>+0.12</td></tr></tbody></table></div>
+      <p>The rig transfers when transfer is possible and does not when it isn't. That is the whole point: the harness is not fooling itself.</p>
+      <p>Note the <code>random</code> row, where <code>dual</code> (+0.99) and <code>task_id</code> (+0.98) are indistinguishable. Any future result reported on a random split is consistent with the text encoder doing nothing at all.</p>
+      <p>Note also <code>entity_only</code> at <strong>+0.12</strong> under <code>arbitrary</code>/<code>held_out_question</code>, where transfer is impossible by construction. That is the split's free lunch, and <code>dual</code> at −0.09 sits well below it. Before the control was fixed this cell read −0.01, i.e. the ceiling on that split was understated by 0.13.</p>
+      <h2>What it caught</h2>
+      <p>The rig's first run <strong>failed</strong>, and the failure was the useful part.</p>
+      <p>I had pre-registered "<code>entity_only</code> sits at chance everywhere." Under <code>arbitrary</code> / <code>held_out_entity_family</code> it scored <strong>+0.204</strong> (<strong>+0.214</strong> with the control fixed; see the correction at the top — the original number was a label prior, and only the repaired control actually measures the mechanism described below).</p>
+      <p>Not a bug. Families 4 and 5 sit far from the origin in latent space (‖mean z‖ ≈ 2.6). For an entity far from the origin, <code>sign(w·z)</code> is dominated by the family offset rather than by the probe <code>w</code>, so most questions share an answer for those entities — per-entity label agreement across questions reaches <strong>0.63</strong> for family 5. "Ignore the question, predict this entity's majority label" therefore scores ~0.60 legitimately, matching the observed 0.602.</p>
+      <p><strong>This will happen with real peptides.</strong> A family with extreme composition will get the same answer to most property questions, and an entity-only baseline will look smart on a held-out-family split. It did: on the AMP benchmark <code>entity_only</code> reaches 0.533 against <code>cross_attention</code>'s 0.555 without ever reading the question.</p>
+      <p>The fix was not to loosen the threshold until it went green. The expectation was wrong, so:</p>
+      <ul><li>the shortcut level is now <strong>measured per split</strong> (<code>shortcut_ceiling</code>) and reported on every run as an <code>INFO</code> line;</li><li>every claim is checked as a <strong>margin over that floor</strong>, not as an absolute;</li><li>a <code>WARN</code> fires when &gt;15% of a split is answerable without using both inputs;</li><li><code>test_family_shift_creates_a_real_entity_only_shortcut</code> pins the finding so it cannot regress into a silent assumption.</li></ul>
+      <h2>Reading a future result</h2>
+      <ol><li><code>INFO shortcut ceiling</code> first. It is the real zero.</li><li><code>task_id</code> on an unseen-question split. That is the transfer floor. <code>dual</code> beating chance is uninteresting; <code>dual</code> beating <strong><code>task_id</code></strong> is the claim.</li><li>Calibration next to accuracy, never after it. A model that is right 80% of the time and confident 99% of the time spends bench time on its own overconfidence. <code>overconfidence</code> (mean confidence − accuracy) is the column that matters for "should I run this experiment."</li><li>A number from <code>random</code> supports no generalization claim.</li></ol>
+      <h2>Limits</h2>
+      <p>Synthetic by design. The entity encoder is a small mean-pooled MLP, not ESM-2 — this rig tests the evaluation contract, not representation quality. Passing here is necessary, nowhere near sufficient. It says the <em>instrument</em> works; it says nothing yet about biology.</p>
+      <p>And the correction at the top is the standing warning about this whole approach: a control is itself a piece of code that can be silently wrong, and a broken control fails <em>quietly</em>, by producing a plausible number. Every control here is now pinned by a test that asserts what it is allowed to see (<code>tests/test_control.py</code>, <code>tests/test_real_models.py</code>).</p>
+      <h2>Files</h2>
+      <pre><code>aster/control/synthetic.py   two regimes with known ground truth
+      aster/control/splits.py      random / question / family / both
+      aster/control/models.py      dual + the four controls
+      aster/control/metrics.py     accuracy, NLL, Brier, ECE/MCE, temperature
+      aster/control/harness.py     training, evaluation, and verdict()
+      aster/control/tensors.py     whole-dataset tensorization
+      scripts/run_control.py       the experiment
+      tests/test_control.py        the same, as CI</code></pre>
+      <p>Nothing here imports or modifies <code>aster/model.py</code>.</p>
+    </article>
+
+    <footer>
+      <div>Source: <a href="https://github.com/sathvikask0/aster" target="_blank" rel="noopener">github.com/sathvikask0/aster</a></div>
+      <div>License: MIT · Aster Project</div>
+    </footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Milestone 01 · Aster</title>
+  <meta name="description" content="First executable prototype and the Arc sample data audit." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <nav class="doc-nav">
+      <a href="index.html">Result</a>
+      <a href="state.html">State of the project</a>
+      <a href="rig.html">Control rig</a>
+      <a href="resolution.html">v0.2 benchmark</a>
+      <a href="in-progress.html">In progress</a>
+      <a href="milestone.html" class="here">Milestone 01</a>
+      <span class="spacer"></span>
+      <a href="https://github.com/sathvikask0/aster">GitHub</a>
+    </nav>
+    <article>
+      <h1>Milestone 01: executable prototype and data audit</h1>
+      <p>Aster's first release verifies the joint-training implementation. It does <strong>not</strong> establish predictive biological accuracy.</p>
+      <h2>Evidence</h2>
+      <ul><li>Official Arc sample: 600 cells, 1000 genes, five interventions plus controls, 48 experimental batches.</li><li>Unique cell and gene identifiers, finite nonnegative integer counts, no missing observational metadata: verified in <code>arc_sample_audit.json</code>.</li><li>Pretrained encoder smoke test ran on <code>mps</code> for 3 updates, with synthetic sequences, features and labels.</li><li>Updated parameter tensors: ESM 34; text encoder 16.</li><li>Every frozen parameter stayed unchanged. Both selected encoder suffixes had finite nonzero gradients.</li><li>Tests cover frozen/trainable boundaries, candidate permutation, masked options, checkpoint replay and intervention leakage rejection.</li></ul>
+      <p>The downloaded source sample is identified by SHA-256 <code>eb36c766cbf76353f9981cb3a3aa32137622d1de53b29d861c483742bcd4dec7</code> and pinned upstream commit <code>5e64833518a6603a0301cbe28185d49c30f4a986</code>. The pretrained smoke report pins both model revisions.</p>
+      <h2>What the sample cannot tell us</h2>
+      <p>Repeated cells do not provide five hundred independent intervention experiments. There are only five target genes. The sample contains only 1,000 genes, so normalization uses subset totals rather than full transcriptome library sizes. Its pooled-batch descriptive baselines are vulnerable to batch composition differences. The within-threshold label does not establish equivalence or absence of an effect. No generalization, calibration or longevity claim follows from these checks.</p>
+      <p>The baseline holds out one intervention at a time, using the other interventions' class frequencies. This verifies split and metric plumbing; it is not a competitive full-cohort benchmark. Baseline numbers are retained in <code>arc_sample_audit.json</code> for inspection, not promoted as a model result.</p>
+      <h2>Next scientific milestone</h2>
+      <p>Acquire and audit a full experimental cohort; define batch-aware labels and control features; map target and readout genes to verified protein sequences; establish intervention/family-disjoint splits; then jointly train and compare the model against simple baselines and modality ablations. Choose a pretrained cell encoder only after checking its license and data overlap.</p>
+      <p>Full Arc VCC data access is unresolved. No cloud billing was enabled and no biological Aster checkpoint was trained. The compact cell MLP is intentionally a baseline, not a pretrained cell foundation model.</p>
+      <h2>Sources</h2>
+      <ul><li><a href="https://github.com/ArcInstitute/cell-eval2/tree/5e64833518a6603a0301cbe28185d49c30f4a986/docs">Arc sample and tutorial</a>: inspected and downloaded September 27, 2026.</li><li><a href="https://github.com/ArcInstitute/arc-virtual-cell-atlas">Arc data access</a>: official full-data access instructions inspected September 27, 2026.</li><li><a href="https://github.com/facebookresearch/esm">ESM</a> and <a href="https://huggingface.co/prajjwal1/bert-tiny">BERT-tiny</a>: pretrained weights used only in the integration test.</li></ul>
+    </article>
+
+    <footer>
+      <div>Source: <a href="https://github.com/sathvikask0/aster" target="_blank" rel="noopener">github.com/sathvikask0/aster</a></div>
+      <div>License: MIT · Aster Project</div>
+    </footer>
+  </main>
+</body>
+</html>

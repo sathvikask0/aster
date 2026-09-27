@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>v0.2 multi-task benchmark · Aster</title>
+  <meta name="description" content="Task scaling breaks the lookup equivalence; the composition shortcut survives." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <nav class="doc-nav">
+      <a href="index.html">Result</a>
+      <a href="state.html">State of the project</a>
+      <a href="rig.html">Control rig</a>
+      <a href="resolution.html" class="here">v0.2 benchmark</a>
+      <a href="in-progress.html">In progress</a>
+      <a href="milestone.html">Milestone 01</a>
+      <span class="spacer"></span>
+      <a href="https://github.com/sathvikask0/aster">GitHub</a>
+    </nav>
+    <article>
+      <h1>Breaking the Rank-3 Trap: what v0.2 fixed, and what it didn't</h1>
+      <p><strong>September 2026 · Aster v0.2</strong></p>
+      <pre><code>python scripts/run_amp_multitask.py --esm 8M --max-peptides 4000
+      python scripts/recompute_ceilings.py reports/amp_multitask_results.json</code></pre>
+      <div class="callout"><strong>Correction (27 September 2026).</strong> The first version of this report headlined "+0.054 over the lookup floor" and called it positive transfer. That is the wrong zero. The control rig's own reading rule says the shortcut ceiling is the real zero, and the ceiling here was additionally computed <em>in sample</em> — fitted on the same rows it scored. Both are fixed below: the ceiling is now an out-of-fold probe, and every claim is a margin over it. The verdict changes from "resolution" to "half a resolution."</div>
+      <hr />
+      <h2>1. Context: the flaw v0.2 set out to fix</h2>
+      <p>The September negative result showed that on PeptiVerse's 3 usable tasks,</p>
+      <p>$$\text{dual (text encoder)} \approx \text{task\_id (3-row lookup table)}$$</p>
+      <p>Three questions in a 384-dimensional space are 2 degrees of freedom. With no shared tokens across atomic questions like <em>"Is it soluble?"</em>, the text tower had nothing compositional to learn, so it collapsed into an expensive one-hot and transfer to an unseen question was structurally impossible.</p>
+      <hr />
+      <h2>2. What changed</h2>
+      <ol><li><strong>Task scaling (21 pathogen assays).</strong> 64,602 peptide-pathogen associations across 56 microbial targets from 7 public databases (DRAMP, APD3, CAMP, …). 16 tasks train; 5 are held out across three envelope classes (<em>K. pneumoniae</em>, <em>S. typhimurium</em> — Gram-negative; <em>S. epidermidis</em>, <em>B. cereus</em> — Gram-positive; <em>C. albicans</em> — fungal).</li></ol>
+      <ol><li><strong>Mechanistic biophysical prompts.</strong> Atomic names replaced by mechanism descriptions that share constituent concepts across tasks, so an unseen target is a recombination of seen mechanism terms rather than a new symbol: LPS outer membrane / thin peptidoglycan (Gram-negative), thick porous peptidoglycan / cytoplasmic lysis (Gram-positive), chitin, beta-glucan, ergosterol (fungal).</li></ol>
+      <ol><li><strong>Multi-head cross-attention (<code>CrossAttentionAster</code>).</strong> The pooled dot product $\mathbf{u}^\top\mathbf{v}$ is replaced by question-conditioned attention, $\text{Attn}(Q=\mathbf{q}_\text{text}, K=V=\mathbf{x}_\text{slots})$, so prompt terms can weight residue feature subspaces.</li></ol>
+      <hr />
+      <h2>3. Results on 5 unseen pathogens (5,144 held-out pairs)</h2>
+      <p>Two zeros matter, and they disagree.</p>
+      <p><strong><code>task_id</code> — the lookup floor.</strong> Structurally chance on an unseen task. Beating it says the text tower is no longer a lookup table.</p>
+      <p><strong><code>ceiling</code> — the shortcut ceiling.</strong> <code>max(majority, composition probe)</code>, where the probe is a logistic regression on 20-dim amino-acid frequencies scored <strong>out of fold</strong>. Beating it says the model knows something a bag of amino acids does not. This is the real zero.</p>
+      <div class="table-wrapper"><table><thead><tr><th>Model</th><th>Overall</th><th>vs <code>task_id</code> (floor)</th><th>Mean lift vs <strong>ceiling</strong></th><th>Tasks above ceiling</th></tr></thead><tbody><tr><td><code>cross_attention</code></td><td><strong>0.555</strong></td><td><strong>+0.054</strong></td><td><strong>−0.058</strong></td><td>1 / 5</td></tr><tr><td><code>dual_dot</code></td><td>0.537</td><td>+0.036</td><td>−0.075</td><td>1 / 5</td></tr><tr><td><code>entity_only</code></td><td>0.533</td><td>+0.032</td><td>−0.072</td><td>0 / 5</td></tr><tr><td><code>task_id</code></td><td>0.501</td><td>0.000</td><td>−0.098</td><td>0 / 5</td></tr><tr><td><code>question_only</code></td><td>0.499</td><td>−0.002</td><td>−0.103</td><td>0 / 5</td></tr></tbody></table></div>
+      <p>Per held-out task, <code>cross_attention</code> against the ceiling:</p>
+      <div class="table-wrapper"><table><thead><tr><th>Held-out target</th><th>Class</th><th>n</th><th>Ceiling</th><th><code>cross_attention</code></th><th>Lift</th><th>Beyond noise?</th></tr></thead><tbody><tr><td><em>K. pneumoniae</em></td><td>Gram-negative</td><td>1,524</td><td>0.554</td><td>0.576 ± 0.025</td><td><strong>+0.022</strong></td><td>no</td></tr><tr><td><em>S. epidermidis</em></td><td>Gram-positive</td><td>1,464</td><td>0.602</td><td>0.590 ± 0.025</td><td>−0.012</td><td>no</td></tr><tr><td><em>S. typhimurium</em></td><td>Gram-negative</td><td>985</td><td>0.549</td><td>0.528 ± 0.031</td><td>−0.021</td><td>no</td></tr><tr><td><em>B. cereus</em></td><td>Gram-positive</td><td>586</td><td>0.575</td><td>0.531 ± 0.040</td><td>−0.044</td><td>no</td></tr><tr><td><em>C. albicans</em></td><td>Fungal</td><td>585</td><td>0.721</td><td>0.485 ± 0.041</td><td><strong>−0.236</strong></td><td>yes</td></tr></tbody></table></div>
+      <p>The in-sample ceilings this report previously used were inflated by 0.012 to 0.039 (e.g. <em>S. typhimurium</em> 0.578 → 0.549, <em>B. cereus</em> 0.614 → 0.575). Fixing them moves individual lifts but not the verdict.</p>
+      <hr />
+      <h2>4. Findings</h2>
+      <ol><li><strong>The lookup equivalence is broken — that part holds.</strong> <code>cross_attention</code> beats <code>task_id</code> by +0.054 overall and <code>dual_dot</code> by +0.018. Under v0.1 those gaps were zero. Task scaling plus shared mechanism vocabulary gave the text tower something to learn that a lookup row cannot represent.</li></ol>
+      <ol><li><strong>The composition shortcut is not broken.</strong> Against the real zero, the mean lift is <strong>−0.058</strong>, and 4 of 5 held-out targets sit below a 20-dimensional bag of amino acids. The single positive lift (+0.022 on <em>K. pneumoniae</em>) is smaller than the combined 95% intervals — it is not a result.</li></ol>
+      <ol><li><strong>The fungal target is a blowout, and it is diagnostic.</strong> On <em>C. albicans</em> the composition probe reaches 0.721 while every model sits at chance. The presumed-negatives drawn for that task differ from its positives so sharply in composition that the split is nearly solved by amino-acid frequency alone — which is a statement about how the negatives were constructed, not about antifungal biology (§5).</li></ol>
+      <ol><li><strong><code>entity_only</code> explains most of the gain.</strong> It reaches 0.533 without ever seeing the question, against <code>cross_attention</code>'s 0.555. The margin genuinely attributable to the prompt is ~0.022 overall, in the same range as the noise on any single task.</li></ol>
+      <p><strong>Verdict: the architecture question is answered, the biology question is not.</strong> The text encoder now earns parameters relative to a lookup table, and against the only baseline that matters this benchmark remains a negative result.</p>
+      <hr />
+      <h2>5. Known limitations of this benchmark</h2>
+      <ul><li><strong>Every negative is presumed, not measured.</strong> The source tables are presence-only: they record that a peptide was reported active against a pathogen, never that one was tested and found inactive. A negative here means "no record", which is partly a statement about what anyone assayed. <code>load_amp_benchmark(negative_policy="covered")</code> now restricts negatives to peptides with records against ≥3 other pathogens, which narrows the coverage confound without removing it. The results above predate that option and use <code>negative_policy="random"</code>.</li><li><strong>Negatives are not composition-matched</strong>, which is why the ceiling is high in the first place. Addressed directly by the experiment in <a href="in-progress.html">In progress: v0.3</a>.</li><li><strong>One seed, one split.</strong> No seed variance is reported. Per-task intervals are normal-approximation binomial and ignore peptide-level correlation, so they are, if anything, optimistic.</li><li><strong>ESM-2 8M only.</strong> Whether a larger protein backbone clears the ceiling is untested.</li></ul>
+    </article>
+
+    <footer>
+      <div>Source: <a href="https://github.com/sathvikask0/aster" target="_blank" rel="noopener">github.com/sathvikask0/aster</a></div>
+      <div>License: MIT · Aster Project</div>
+    </footer>
+  </main>
+</body>
+</html>

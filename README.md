@@ -4,7 +4,7 @@
 
 Give Aster a biological context and candidate answers; its proposed role is to return structured predictions that researchers can evaluate against experiments.
 
-> 📄 **Reports:** [The text encoder isn't doing anything (September 2026)](https://sathvikask0.github.io/aster/)
+> 📄 **Project site:** [The text encoder isn't doing anything (September 2026)](https://sathvikask0.github.io/aster/) · [State of the project](https://sathvikask0.github.io/aster/state.html)
 
 ## Current status
 
@@ -58,15 +58,18 @@ uv run python scripts/smoke_pretrained.py
 
 The audit downloads a roughly 5 MB checksum-verified sample directly from a pinned Arc repository commit. The pretrained smoke test downloads the compact encoder weights, executes three optimization steps on MPS when available, and verifies updates in both encoders and unchanged frozen weights. Its inputs and labels are artificial: loss values are not biological performance.
 
-Reports are in [`reports/`](reports/):
+Every report lives on the project site — there are no markdown reports to keep in sync:
 
-| Report | What it says |
+| Page | What it says |
 |---|---|
-| [**STATE**](reports/STATE.md) | **Start here.** Standing summary of the architecture, what works, what failed and why, and the traps that have already bitten once. |
-| [MILESTONE_01](reports/MILESTONE_01.md) | First working pipeline. |
-| [CONTROL_RIG](reports/CONTROL_RIG.md) | The evaluation, tested on synthetic data whose ground truth we control, before it was pointed at biology. |
-| [RESOLUTION_01](reports/RESOLUTION_01.md) | v0.2 multi-task benchmark. The text encoder stops being a lookup table; it still does not clear the composition shortcut. Corrected 27 Sep 2026 — see the note at the top. |
-| [IN_PROGRESS_01](reports/IN_PROGRESS_01.md) | The experiment being set up now: composition-matched negatives, so the shortcut cannot exist. Pre-registered, not yet run. |
+| [**State of the project**](https://sathvikask0.github.io/aster/state.html) | **Start here.** The architecture, what works, what failed and why, and the traps that have already bitten once. Opens with a plain-language summary. |
+| [Control rig](https://sathvikask0.github.io/aster/rig.html) | The evaluation, tested on synthetic data whose ground truth we control, before it was pointed at biology. Includes the correction to the `entity_only` control. |
+| [v0.2 benchmark](https://sathvikask0.github.io/aster/resolution.html) | Task scaling breaks the lookup equivalence; the composition shortcut survives. |
+| [In progress](https://sathvikask0.github.io/aster/in-progress.html) | Composition-matched negatives, so the shortcut cannot exist. Pre-registered, not yet run. |
+| [Milestone 01](https://sathvikask0.github.io/aster/milestone.html) | First executable prototype and the Arc data audit. |
+
+Machine-readable results stay in [`reports/`](reports/) as JSON. The site is built
+from `docs/`; edit the pages there.
 
 ### Benchmark reporting rule
 
