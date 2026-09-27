@@ -4,7 +4,7 @@
 
 Give Aster a biological context and candidate answers; its proposed role is to return structured predictions that researchers can evaluate against experiments.
 
-> 📄 **Project site:** [The text encoder isn't doing anything (September 2026)](https://sathvikask0.github.io/aster/) · [State of the project](https://sathvikask0.github.io/aster/state.html)
+> 📄 **Project site: [sathvikask0.github.io/aster](https://sathvikask0.github.io/aster/)** — every experiment, indexed. Start with [the plain-language summary](https://sathvikask0.github.io/aster/state.html).
 
 ## Current status
 
@@ -62,6 +62,8 @@ Every report lives on the project site — there are no markdown reports to keep
 
 | Page | What it says |
 |---|---|
+| [Overview](https://sathvikask0.github.io/aster/) | The index: what the premise is, where it stands, and links to everything below. |
+| [The negative result](https://sathvikask0.github.io/aster/negative-result.html) | v0.1: the text encoder scored 0.715 against a three-row lookup table's 0.718. |
 | [**State of the project**](https://sathvikask0.github.io/aster/state.html) | **Start here.** The architecture, what works, what failed and why, and the traps that have already bitten once. Opens with a plain-language summary. |
 | [Control rig](https://sathvikask0.github.io/aster/rig.html) | The evaluation, tested on synthetic data whose ground truth we control, before it was pointed at biology. Includes the correction to the `entity_only` control. |
 | [v0.2 benchmark](https://sathvikask0.github.io/aster/resolution.html) | Task scaling breaks the lookup equivalence; the composition shortcut survives. |

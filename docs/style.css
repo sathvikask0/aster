@@ -430,3 +430,12 @@
     article pre code { color: inherit; }
     article table td:first-child { color: #e2e8f0; }
     article del { color: var(--text-dim); }
+
+    /* ---- hub cards ---- */
+    a.hub-card {
+      display: block; text-decoration: none; color: inherit;
+      transition: border-color 0.15s ease, transform 0.15s ease;
+    }
+    a.hub-card:hover { border-color: rgba(139, 92, 246, 0.45); transform: translateY(-1px); }
+    a.hub-card .exp-title { color: #fff; }
+    a.hub-card:hover .exp-title { color: #c4b5fd; }

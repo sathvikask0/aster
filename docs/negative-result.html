@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The text encoder isn't doing anything &middot; Aster</title>
+  <meta name="description" content="Aster asks whether encoding a biological question as language buys generalization to questions a model was never trained on. On PeptiVerse, it does not." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <nav class="doc-nav">
+      <a href="index.html">Overview</a>
+      <a href="negative-result.html" class="here">The negative result</a>
+      <a href="state.html">State of the project</a>
+      <a href="rig.html">Control rig</a>
+      <a href="resolution.html">v0.2 benchmark</a>
+      <a href="in-progress.html">In progress</a>
+      <a href="milestone.html">Milestone 01</a>
+      <span class="spacer"></span>
+      <a href="https://github.com/sathvikask0/aster">GitHub</a>
+    </nav>
+    <header>
+      <div class="badge">
+        <span class="badge-dot"></span>
+        Negative result &middot; September 2026
+      </div>
+      <h1>The text encoder isn't doing anything.</h1>
+      <p class="lead">
+        Aster asks whether encoding a biological question as language buys generalization to questions a model was never trained on. On PeptiVerse, it does not &mdash; and the reason is structural, not a matter of tuning.
+      </p>
+
+      <div class="meta-bar">
+        <span>Dataset: <a href="https://huggingface.co/datasets/ChatterjeeLab/PeptiVerse_data" target="_blank" rel="noopener">PeptiVerse (ChatterjeeLab)</a></span>
+        <span>&middot;</span>
+        <span>Backbone: ESM-2 8M + MiniLM-L6-v2</span>
+        <span>&middot;</span>
+        <span>Sequel: <a href="resolution.html">the v0.2 benchmark &rarr;</a></span>
+      </div>
+    </header>
+
+<!-- The central result -->
+    <section id="central-result">
+      <h2>The central result</h2>
+      <p class="section-desc">Trained on all three properties, tested on questions it has seen</p>
+      
+      <p>
+        The architecture pairs a protein encoder with a text encoder and scores their outputs by dot product. Swap the text tower for a lookup table over three integers and nothing changes.
+      </p>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Accuracy</th>
+              <th>vs ceiling</th>
+              <th>Hemolysis</th>
+              <th>Penetrance</th>
+              <th>Solubility</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="model-name">dual (text encoder)</td>
+              <td class="num">0.715</td>
+              <td class="delta-pos">+0.068</td>
+              <td class="num">0.822</td>
+              <td class="num">0.845</td>
+              <td class="num">0.662</td>
+            </tr>
+            <tr>
+              <td class="model-name">task_id (lookup)</td>
+              <td class="num">0.718</td>
+              <td class="delta-pos">+0.071</td>
+              <td class="num">0.826</td>
+              <td class="num">0.840</td>
+              <td class="num">0.665</td>
+            </tr>
+            <tr>
+              <td class="model-name">composition only</td>
+              <td class="num">0.629</td>
+              <td class="delta-neg">−0.017</td>
+              <td class="num">0.787</td>
+              <td class="num">0.796</td>
+              <td class="num">0.555</td>
+            </tr>
+            <tr>
+              <td class="model-name">question only</td>
+              <td class="num">0.552</td>
+              <td class="delta-neg">−0.094</td>
+              <td class="num">0.792</td>
+              <td class="num">0.497</td>
+              <td class="num">0.478</td>
+            </tr>
+            <tr>
+              <td class="model-name">entity only</td>
+              <td class="num">0.417</td>
+              <td class="delta-neg">−0.230</td>
+              <td class="num">0.208</td>
+              <td class="num">0.497</td>
+              <td class="num">0.478</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="highlight-card">
+        <div class="highlight-stat">dual 0.715 · task_id 0.718</div>
+        <div class="highlight-text">
+          A frozen 384-dimensional sentence encoder performs identically to three integers. Whatever the model learned, it did not learn it from the words.
+        </div>
+      </div>
+    </section>
+
+<!-- Why this can't be fixed by tuning -->
+    <section id="tuning-limits">
+      <h2>Why this can't be fixed by tuning</h2>
+      <p>
+        With three tasks, the question input takes exactly three distinct values. A 384-dimensional vector restricted to three distinct values carries the same information as a three-way one-hot — not approximately, identically. <code>dual</code> and <code>task_id</code> are not competing hypotheses here; they are the same function written two ways. The experiment is unidentifiable at this scale.
+      </p>
+    </section>
+
+<!-- Leave-one-task-out -->
+    <section id="leave-one-out">
+      <h2>Leave-one-task-out</h2>
+      <p class="section-desc">Train on two properties, hold the third out entirely. Accuracy minus the shortcut ceiling.</p>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Held out</th>
+              <th>dual</th>
+              <th>task_id</th>
+              <th>composition</th>
+              <th>Ceiling</th>
+              <th>ECE</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="model-name">Hemolysis</td>
+              <td class="delta-neg">−0.539</td>
+              <td class="delta-neg">−0.569</td>
+              <td class="delta-neg">−0.388</td>
+              <td class="num">0.784</td>
+              <td class="num">0.319</td>
+            </tr>
+            <tr>
+              <td class="model-name">Penetrance</td>
+              <td class="delta-neg">−0.294</td>
+              <td class="delta-neg">−0.284</td>
+              <td class="delta-neg">−0.350</td>
+              <td class="num">0.784</td>
+              <td class="num">0.218</td>
+            </tr>
+            <tr>
+              <td class="model-name">Solubility</td>
+              <td class="delta-neg">−0.050</td>
+              <td class="delta-neg">−0.107</td>
+              <td class="delta-neg">−0.056</td>
+              <td class="num">0.583</td>
+              <td class="num">0.234</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Zero transfer, which follows from the result above: a lookup table has no row for a question it has never seen. Calibration fails too — expected calibration error of 0.22 to 0.32 with overconfidence positive everywhere. On unseen questions the model is confidently wrong, which is the opposite of the property that would make it useful for deciding what to test next.
+      </p>
+    </section>
+
+<!-- Every experiment, in order -->
+    <section id="experiments-chronology">
+      <h2>Every experiment, in order</h2>
+      <p class="section-desc">Including the ones that failed, and the ones that failed for interesting reasons</p>
+
+      <div class="timeline">
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">01</span>
+            <span class="exp-tag tag-unusable">Unusable</span>
+            <span class="exp-title">Arc Institute virtual cell sample</span>
+          </div>
+          <div class="exp-body">
+            600 cells, 5 target genes, 1,000 measured genes. Label counts came out 1 / 4,997 / 2 across decrease / no-change / increase. <strong>99.94% of labels say "no change"</strong>, so always answering "no change" scores 99.94%. Five target genes also means five questions — too few to hold one out. Fine for testing plumbing, which is what it was used for.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">02</span>
+            <span class="exp-tag tag-passed">Passed</span>
+            <span class="exp-title">Synthetic control rig — semantic regime</span>
+          </div>
+          <div class="exp-body">
+            Questions built compositionally from bound parts, so an unseen question is a new combination of familiar components. Held-out questions: <strong>dual +0.962 lift, task_id −0.014</strong>. Transfer works when the text genuinely carries the rule.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">03</span>
+            <span class="exp-tag tag-passed">Passed</span>
+            <span class="exp-title">Synthetic control rig — arbitrary regime</span>
+          </div>
+          <div class="exp-body">
+            Identical setup, but questions are opaque identifiers and the decision rule is drawn independently of them. Chance is the ceiling by construction. <strong>dual scored −0.093</strong>. The harness reports no transfer where no transfer is possible. This is the check that makes every other number in the rig worth reading.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">04</span>
+            <span class="exp-tag tag-finding">Finding</span>
+            <span class="exp-title">Random splits cannot discriminate the hypothesis</span>
+          </div>
+          <div class="exp-body">
+            On a random split, <strong>dual scored +0.992 and task_id +0.982 — indistinguishable</strong>. Any result reported on a random split is consistent with the text encoder doing nothing at all. This predicted the real-data outcome before the real data arrived.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">05</span>
+            <span class="exp-tag tag-wrong">Expectation was wrong</span>
+            <span class="exp-title">Covariate shift creates a real entity-only shortcut</span>
+          </div>
+          <div class="exp-body">
+            The rig pre-registered "entity-only sits at chance everywhere". Under family shift it scored <strong>+0.204</strong>. Not a bug. Held-out families far from the origin in latent space have their labels dominated by the family offset, so per-entity label agreement across questions reaches 0.63 and ignoring the question becomes a genuine strategy. The threshold was not loosened; the shortcut is now measured per split and every claim is a margin over it.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">06</span>
+            <span class="exp-tag tag-clean">Clean</span>
+            <span class="exp-title">PeptiVerse data audit</span>
+          </div>
+          <div class="exp-body">
+            Four of seven tasks carry amino-acid sequences: hemolysis (6,073), solubility (18,453), nephrotoxicity (17,180), penetrance (2,324). All 100% parseable, labels already binary, zero duplicates, zero train/validation leakage. Toxicity, Caco2 and PAMPA are SMILES-only, so ESM-2 cannot read them without a chemical encoder.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">07</span>
+            <span class="exp-tag tag-wrong">Tasks not independent</span>
+            <span class="exp-title">Solubility negatives are a subset of nephrotoxicity</span>
+          </div>
+          <div class="exp-body">
+            All 9,668 solubility negatives appear in nephrotoxicity, labelled 0 in both, with zero exceptions — <strong>52% of the solubility task</strong>. Training on one while holding out the other makes half the test set answerable by recall. Dropping the shared rows leaves solubility single-class, so the rows cannot be salvaged: nephrotoxicity is dropped as a task instead.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">08</span>
+            <span class="exp-tag tag-finding">Finding</span>
+            <span class="exp-title">Chance is not the baseline</span>
+          </div>
+          <div class="exp-body">
+            Amino-acid composition alone scores <strong>0.784 on penetrance against a 0.500 majority class</strong>. Hemolysis 0.784, solubility 0.583. Every subsequent number is reported as a margin over these, never over chance. Hemolysis is the interesting one — composition buys nothing there, so it is a genuinely hard task where a real model could show its worth.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">09</span>
+            <span class="exp-tag tag-wrong">No transfer</span>
+            <span class="exp-title">Leave-one-task-out on real peptides</span>
+          </div>
+          <div class="exp-body">
+            ESM-2 8M embeddings, frozen MiniLM text encoder, class-weighted loss. Every cell below its shortcut ceiling; <strong>hemolysis landed at 0.246 against a 0.784 ceiling</strong>. Uninterpretable on its own — nothing yet established the model could learn a question it had seen.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">10</span>
+            <span class="exp-tag tag-decisive">Decisive</span>
+            <span class="exp-title">In-distribution control</span>
+          </div>
+          <div class="exp-body">
+            <strong>dual 0.715, task_id 0.718</strong>. The model learns each property well, and the text encoder contributes nothing. This is the result. It confirms on real data exactly what experiment 04 predicted from synthetic data.
+          </div>
+        </div>
+      </div>
+    </section>
+
+<!-- How the evaluation is built -->
+    <section id="evaluation-design">
+      <h2>How the evaluation is built</h2>
+      <p class="section-desc">The controls exist to explain away the hypothesis, not to flatter it.</p>
+
+      <ul class="controls-list">
+        <li>
+          <strong>task_id</strong> — replaces the text encoder with a lookup table whose unknown row is zero-initialized and never trained, so an unseen question yields chance structurally rather than empirically. This is the transfer floor.
+        </li>
+        <li>
+          <strong>composition</strong> — amino-acid frequencies instead of ESM-2, to test whether the protein model earns its cost.
+        </li>
+        <li>
+          <strong>question_only / entity_only</strong> — never see one input. Whatever they score is prior, not biology.
+        </li>
+      </ul>
+
+      <p>
+        Vocabularies are built from training data only; letting test tokens in would hand unseen questions a trained embedding and manufacture transfer. Temperature is fit on a validation set carved from training, never on test. The text encoder stays frozen — with two training tasks, fine-tuning it would teach it their wording and destroy the general semantics the held-out task depends on.
+      </p>
+    </section>
+    <footer>
+      <div>Source: <a href="https://github.com/sathvikask0/aster" target="_blank" rel="noopener">github.com/sathvikask0/aster</a></div>
+      <div>Data: <a href="https://huggingface.co/datasets/ChatterjeeLab/PeptiVerse_data" target="_blank" rel="noopener">PeptiVerse</a> &middot; <a href="https://github.com/wyky481l/KPPepGen" target="_blank" rel="noopener">AMP multi-pathogen set</a></div>
+      <div>License: MIT &middot; Aster Project</div>
+    </footer>
+  </main>
+</body>
+</html>
