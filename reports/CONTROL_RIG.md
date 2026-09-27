@@ -2,6 +2,19 @@
 
 `python scripts/run_control.py` · `pytest tests/test_control.py` · ~15s CPU
 
+> **Correction, 27 September 2026 — the `entity_only` control was broken.**
+> It set `v` to a constant, which makes every option score identical, so the
+> model emitted the same answer for every row in the dataset. It could not use
+> the entity at all. Whatever it scored was the split's label prior wearing the
+> name of an entity shortcut: on `arbitrary`/`held_out_entity_family` it
+> reported 0.602, and "always answer option 0" scores **exactly 0.6021** there.
+> A control that cannot express the shortcut it is named after measures nothing
+> while looking like a working control. It now gets a learned row per option and
+> no question content, which is the shortcut it was always supposed to measure.
+> All 16 checks still pass and every conclusion below survives — but the
+> measured shortcut ceilings moved, some of them a lot, and the numbers in this
+> document are the post-fix ones.
+
 ## Why this exists
 
 Aster's claim is that encoding the question with a text encoder buys
@@ -59,7 +72,7 @@ fit on a val set carved from **train**, never on test.
 | `dual` | **+0.96** | **−0.09** |
 | `task_id` | −0.01 | −0.01 |
 | `question_only` | +0.07 | −0.01 |
-| `entity_only` | −0.01 | −0.01 |
+| `entity_only` | +0.06 | +0.12 |
 
 The rig transfers when transfer is possible and does not when it isn't. That is
 the whole point: the harness is not fooling itself.
@@ -68,12 +81,20 @@ Note the `random` row, where `dual` (+0.99) and `task_id` (+0.98) are
 indistinguishable. Any future result reported on a random split is consistent
 with the text encoder doing nothing at all.
 
+Note also `entity_only` at **+0.12** under `arbitrary`/`held_out_question`,
+where transfer is impossible by construction. That is the split's free lunch,
+and `dual` at −0.09 sits well below it. Before the control was fixed this cell
+read −0.01, i.e. the ceiling on that split was understated by 0.13.
+
 ## What it caught
 
 The rig's first run **failed**, and the failure was the useful part.
 
 I had pre-registered "`entity_only` sits at chance everywhere." Under
-`arbitrary` / `held_out_entity_family` it scored **+0.204**.
+`arbitrary` / `held_out_entity_family` it scored **+0.204** (**+0.214** with the
+control fixed; see the correction at the top — the original number was a label
+prior, and only the repaired control actually measures the mechanism described
+below).
 
 Not a bug. Families 4 and 5 sit far from the origin in latent space
 (‖mean z‖ ≈ 2.6). For an entity far from the origin, `sign(w·z)` is dominated
@@ -84,7 +105,9 @@ label" therefore scores ~0.60 legitimately, matching the observed 0.602.
 
 **This will happen with real peptides.** A family with extreme composition will
 get the same answer to most property questions, and an entity-only baseline
-will look smart on a held-out-family split.
+will look smart on a held-out-family split. It did: on the AMP benchmark
+`entity_only` reaches 0.533 against `cross_attention`'s 0.555 without ever
+reading the question.
 
 The fix was not to loosen the threshold until it went green. The expectation was
 wrong, so:
@@ -113,6 +136,12 @@ Synthetic by design. The entity encoder is a small mean-pooled MLP, not ESM-2 �
 this rig tests the evaluation contract, not representation quality. Passing here
 is necessary, nowhere near sufficient. It says the *instrument* works; it says
 nothing yet about biology.
+
+And the correction at the top is the standing warning about this whole approach:
+a control is itself a piece of code that can be silently wrong, and a broken
+control fails *quietly*, by producing a plausible number. Every control here is
+now pinned by a test that asserts what it is allowed to see
+(`tests/test_control.py`, `tests/test_real_models.py`).
 
 ## Files
 

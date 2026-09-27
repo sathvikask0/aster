@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import pytest
 
+import torch
+
 from aster.control import splits as S
-from aster.control.harness import run_grid, verdict
+from aster.control.harness import make_sets, run_grid, train_one, verdict
 from aster.control.synthetic import build
 
 SMALL = dict(examples_per_question=120, n_paired_questions=32)
@@ -74,10 +76,37 @@ def test_task_id_is_at_chance_on_unseen_questions(semantic_heldout, arbitrary_he
         assert _lift(res, "task_id") < TOL
 
 
-def test_shortcut_detectors_stay_at_chance(semantic_heldout, arbitrary_heldout):
-    for _, res in (semantic_heldout, arbitrary_heldout):
-        assert _lift(res, "question_only") < TOL
-        assert _lift(res, "entity_only") < TOL
+def _floor(res):
+    """The measured shortcut ceiling: how well you do without using both inputs."""
+    return max(0.0, _lift(res, "question_only"), _lift(res, "entity_only"))
+
+
+def test_claims_are_margins_over_the_measured_shortcut(semantic_heldout, arbitrary_heldout):
+    """This test used to assert the detectors sit at chance. That expectation
+    was wrong twice over: `harness.shortcut_ceiling` already documents why a
+    shortcut is a measured property of the split, and the assertion only ever
+    passed because `entity_only` was a constant predictor that could not express
+    a shortcut at all. What has to hold is the margin, not the absolute.
+    """
+    _, sem = semantic_heldout
+    assert _lift(sem, "dual") - _floor(sem) > 0.25
+
+    _, arb = arbitrary_heldout
+    assert _lift(arb, "dual") - _floor(arb) < TOL
+
+
+def test_entity_only_is_not_a_constant_predictor(semantic_heldout):
+    """A control that emits one answer for every row measures the label prior
+    and calls it an entity shortcut. Pinned so it cannot come back.
+    """
+    split, _ = semantic_heldout
+    sets = make_sets(split)
+    model = train_one(sets, "entity_only", seed=1, epochs=EPOCHS)
+    with torch.no_grad():
+        logits = model(sets["test"].batch(slice(None)))
+    spread = (logits - logits[:, :1]).abs().max().item()
+    assert spread > 1e-4, "entity_only scores every option identically"
+    assert logits.argmax(1).float().std().item() > 0, "entity_only emits one answer for every row"
 
 
 def test_family_shift_creates_a_real_entity_only_shortcut():

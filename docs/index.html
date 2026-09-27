@@ -713,6 +713,8 @@
         &ldquo;+0.054 over the lookup floor&rdquo; and called it positive transfer. That is the wrong zero,
         and the ceiling it was compared against was additionally fitted on the same rows it scored.
         Both are fixed below. The verdict changes from <em>resolution</em> to <em>half a resolution</em>.
+        Since then the cross-attention model has also been rebuilt to score the candidate answers it was
+        ignoring, so the model accuracies on this page are version-1 numbers awaiting a re-run.
       </div>
 
       <p>
@@ -899,6 +901,13 @@
               <td class="model-name">Ceiling re-derivation</td>
               <td><span class="exp-tag tag-finding">Correction</span></td>
               <td>The v0.2 ceilings were fitted in sample, inflating them by 0.012&ndash;0.039. Now scored out of fold, in one shared module.</td>
+            </tr>
+            <tr>
+              <td class="model-name">Audit of the controls themselves</td>
+              <td><span class="exp-tag tag-wrong">Two were broken</span></td>
+              <td>
+                The cross-attention model never read the candidate answers &mdash; it classified into fixed slots, so the answer text was unused and the option count was stuck at two. And <code>entity_only</code>, the control that is supposed to detect &ldquo;answers without reading the question&rdquo;, scored every option identically, so it emitted one answer for every row: it was measuring the label prior. On the split where the rig famously caught a shortcut at 0.602, &ldquo;always answer option 0&rdquo; scores <strong>exactly 0.6021</strong>. Both fixed; the rig still passes 16/16, and the repaired control raises the measured ceiling on one split by 0.13.
+              </td>
             </tr>
           </tbody>
         </table>

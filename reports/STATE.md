@@ -7,6 +7,57 @@ have already bitten once.
 
 ---
 
+## 0. In plain language
+
+**What you're testing.** One model that answers biology questions asked in
+English, so a new question is a new sentence instead of a new training run.
+Everything here is trying to find out whether the English does any work, or
+whether it is decoration.
+
+**The first way you get fooled.** The model can ignore the words and memorize
+"question #3 → this pattern of answers." That looks exactly like understanding
+until you test it on a question it has never seen. So there is a deliberately
+stupid baseline, `task_id`, that replaces the text encoder with a lookup table
+numbered 1, 2, 3. If the real model does not beat the lookup table, the words
+are doing nothing.
+
+**The second way you get fooled, and the one biting now.** The peptides labelled
+*active* are real antimicrobials; the ones labelled *inactive* are peptides
+nobody wrote down. Real antimicrobials tend to be positively charged and greasy,
+so a dumb rule — "count the amino acids; is it charged and greasy?" — answers
+most of the benchmark without reading the question. That dumb rule is the
+**ceiling**. Beating the lookup table says the architecture is sound. Beating
+the ceiling says something was learned about biology. Only the second one is a
+scientific claim.
+
+**Where things stand.** v0.1 failed cleanly: with 3 questions the text encoder
+was mathematically indistinguishable from a lookup table, which is a counting
+problem, not a tuning problem. v0.2 scaled to 21 pathogens with questions that
+share vocabulary, and the model finally beat the lookup table — so the words now
+matter. But against the dumb amino-acid rule it loses on 4 of 5 pathogens, and a
+stripped-down model that never sees the question at all scores 0.533 where the
+full model scores 0.555. Almost everything it knows, it knows without reading
+the question.
+
+**So: the instruments work, the biology is not there yet.** That is a real
+position to be in, and the instruments are the harder half. The synthetic rig
+correctly reports "no transfer" when transfer is impossible, which is the check
+almost nobody runs.
+
+**Why the next experiment exists.** You cannot tell whether the model learned
+biology while the dumb rule is still available to it. So the dumb rule gets
+removed: each *inactive* peptide is chosen to have nearly the same amino-acid
+makeup as an *active* one. Counting amino acids then buys nothing — it falls
+from 0.721 to 0.522, near coin-flipping. Whatever score survives has to come
+from somewhere real. It may all collapse to chance, and that would say this
+dataset was never able to answer the question.
+
+**The thing to keep in mind.** Every "inactive" label in this project means
+"nobody recorded it", not "somebody tested it and it did nothing". No amount of
+modelling fixes that; only different data does.
+
+---
+
 ## 1. The premise under test
 
 > Does encoding a biological question **as language** buy generalization to
@@ -76,14 +127,15 @@ every AMP and PeptiVerse number comes from.
 | `question_only` | label prior | ✗ | ✓ |
 | `entity_only` | entity prior | ✓ | ✗ |
 
-> **Open design flaw, decide before v0.3 runs.** `CrossAttentionAster` never
-> touches `a_emb`. It classifies into positions 0/1 with a fixed head, so the
-> answer *text* is unused and the number of options is frozen at two. The
-> best-performing v0.2 model is therefore **not** a typed-decision model — it
-> cannot take a new answer set, and it cannot be the thing `aster/model.py`
-> grows into. Either add answer-conditioned scoring to it, or stop treating its
-> accuracy as evidence about the premise. `RealAster` does score answers, and
-> is the architecture that actually matches the claim.
+> **Fixed 27 September 2026 (architecture v2).** Version 1 of
+> `CrossAttentionAster` never touched `a_emb`: it built one query from the
+> question and ended in a fixed 2-way head, so the answer text was unused and
+> the option count was frozen at two -- not a typed-decision model at all, and
+> not something `aster/model.py` could grow into. It now builds one query per
+> candidate answer and emits one score per option, so k options in gives k
+> logits out. **Every published v0.2 number came from version 1 and is not
+> comparable to anything this class produces now.** The re-run happens with
+> v0.3; `config.arch_versions` in the results JSON records which is which.
 
 ### 2.3 `aster/control/` — the synthetic control rig
 
@@ -128,7 +180,9 @@ nothing from `aster/model.py`.
   parameter verified unchanged; checkpoint replay, option permutation and
   option masking all covered by tests.
 - **Shortcut measurement.** Ceiling is measured per split and reported on every
-  run, with a WARN when >15% of a split is answerable without both inputs.
+  run, with a WARN when >15% of a split is answerable without both inputs. That
+  WARN now fires on two `arbitrary` splits where the broken control kept it
+  silent.
 - **Data audit hygiene.** Arc sample pinned by SHA-256 and upstream commit;
   descriptive baselines kept in the JSON and explicitly not promoted.
 - **Task scaling breaks the lookup equivalence** (v0.2): `cross_attention`
@@ -148,6 +202,7 @@ nothing from `aster/model.py`.
 | 5 | **AMP multi-task v0.2 against the real zero** | Negative | Mean lift vs ceiling **−0.058**; 4 of 5 held-out targets below a 20-dim bag of amino acids; the one positive (+0.022, *K. pneumoniae*) inside the intervals. `entity_only` 0.533 vs `cross_attention` 0.555 — most of the gain never needed the question. |
 | 6 | **The original v0.2 write-up** | Reporting error, self-inflicted | Headlined lift over `task_id` rather than over the ceiling, and the ceiling was fitted in sample (inflated 0.012–0.039). The rig was built to catch exactly this and the report bypassed it. Fixed 27 Sep. |
 | 7 | **Pre-registered "entity_only sits at chance"** | Expectation was wrong | Under `arbitrary`/held-out-family it scored **+0.204**. Families far from the origin (‖mean z‖ ≈ 2.6) make `sign(w·z)` dominated by the family offset, so per-entity label agreement hits 0.63 and "predict this entity's majority" legitimately scores ~0.60. Fix was to measure the shortcut per split, not to loosen the threshold. |
+| 8 | **The `entity_only` control itself** | Broken, silently | It set `v` to a constant, so every option scored identically and the model emitted one answer for every row. It could not use the entity at all: the 0.602 above is exactly what "always answer option 0" scores on that split. A control that cannot express its own shortcut measures nothing *while producing a plausible number*. Fixed 27 Sep in both the rig and `aster/real/models.py`; all 16 rig checks still pass, but measured ceilings moved, most sharply `arbitrary`/held_out_question, understated by 0.13. |
 
 ---
 
@@ -172,14 +227,22 @@ nothing from `aster/model.py`.
    0.721 → 0.522).
 8. **Below-chance accuracy is a prior-inversion signature**, not a bug — check
    the label prior before debugging the model.
+9. **A control is code, and can be silently wrong.** It fails by producing a
+   believable number, not by crashing. Before trusting a control, check what it
+   is *structurally able to see* — and if its accuracy matches "always answer
+   option 0", that is what it is doing. Every mode is now pinned by a test that
+   asserts what it may and may not read.
 
 ---
 
 ## 7. Current gaps in the harness
 
-- **The AMP benchmark reports no calibration at all** — no ECE, no temperature,
-  no overconfidence. The PeptiVerse run did. This is a regression, and given
-  finding #3 it is the wrong metric to have dropped.
+- **The stored v0.2 model accuracies predate three fixes.** Out-of-fold ceilings
+  were applied retroactively, but architecture v2, the repaired `entity_only`
+  and calibration all require a re-run. Treat them as version-1 numbers.
+- ~~The AMP benchmark reports no calibration~~ — fixed 27 Sep. It fits
+  temperature on validation, reports ECE, Brier, NLL and overconfidence, and
+  warns when a model is confident and wrong.
 - **One seed, one split, fixed five held-out targets.** No seed variance, and
   binomial intervals ignore peptide-level correlation, so they are optimistic.
 - **ESM-2 8M everywhere.** The 650M/ModernBERT research config has never run.

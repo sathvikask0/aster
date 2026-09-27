@@ -19,6 +19,7 @@ import torch.nn.functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from aster.control import metrics as M
 from aster.real.amp import load_amp_benchmark
 from aster.real.embed import embed_sequences, embed_texts, pick_device
 from aster.real.ceilings import binomial_ci95, composition_ceiling, composition_matrix
@@ -216,20 +217,31 @@ def main():
     ]
 
     print("\n--- Training and Evaluating Models on Multi-Task Zero-Shot Transfer ---")
+    arch_versions = {}
     for name, m_cls, mode in models_to_test:
         print(f"\nTraining [{name}] (mode={mode})...")
+        arch_versions[name] = getattr(m_cls, "ARCH_VERSION", 1)
         model = train_model(
             m_cls, tr_tensor, va_tensor, mode, d_entity, d_text, n_tasks, device,
             epochs=args.epochs, bs=256
         )
 
         with torch.no_grad():
-            logits = model(te_tensor)
-            probs = F.softmax(logits, dim=-1)
-            preds = probs.argmax(dim=-1).cpu().numpy()
-            y_true = te_tensor["y"].cpu().numpy()
+            te_logits = model(te_tensor).cpu().numpy()
+            va_logits = model(va_tensor).cpu().numpy()
 
-        overall_acc = float(np.mean(preds == y_true))
+        y_true = te_tensor["y"].cpu().numpy()
+        y_val = va_tensor["y"].cpu().numpy()
+
+        # Temperature is fit on validation and applied to test. It cannot make a
+        # wrong model right; it only stops a model lying about how sure it is.
+        temperature = M.fit_temperature(va_logits, y_val)
+        probs = M.softmax(te_logits, temperature)
+        preds = probs.argmax(1)
+
+        raw = M.compute(M.softmax(te_logits), y_true).as_dict()
+        calibrated = M.compute(probs, y_true).as_dict()
+        overall_acc = calibrated["accuracy"]
         
         # Per-task accuracy
         per_task = {}
@@ -249,11 +261,22 @@ def main():
 
         results[name] = {
             "overall_accuracy": overall_acc,
+            "temperature": float(temperature),
+            "calibration": {"raw": raw, "calibrated": calibrated},
             "per_task": per_task,
         }
-        print(f"  [{name:16s}] Overall Held-out Acc: {overall_acc:.3f}")
+        print(
+            f"  [{name:16s}] Acc: {overall_acc:.3f} | ECE: {calibrated['ece']:.3f} "
+            f"| overconfidence: {calibrated['overconfidence']:+.3f} (T={temperature:.2f})"
+        )
+        if calibrated["overconfidence"] > 0.05:
+            print(
+                f"    WARN {name}: confident {calibrated['mean_confidence']:.3f} but right "
+                f"{calibrated['accuracy']:.3f}. Do not spend bench time on this."
+            )
         for t in held_out_tasks:
-            print(f"    {t:14s}: {per_task[t]['acc']:.3f} (lift vs ceiling: {per_task[t]['lift']:+.3f})")
+            flag = "" if per_task[t]["lift_is_significant"] else "  (inside intervals)"
+            print(f"    {t:14s}: {per_task[t]['acc']:.3f} (lift vs ceiling: {per_task[t]['lift']:+.3f}){flag}")
 
     # Output report JSON
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -267,6 +290,7 @@ def main():
                 "min_samples": MIN_SAMPLES,
                 "seed": args.seed,
                 "negative_policy": args.negative_policy,
+                "arch_versions": arch_versions,
                 "n_train": len(train_ex),
                 "n_val": len(val_ex),
                 "n_test": len(test_ex),

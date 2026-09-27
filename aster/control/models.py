@@ -124,6 +124,13 @@ class ControlScorer(nn.Module):
         self.entity = EntityEncoder(h=h, frozen=(mode == "frozen_entity"))
         if mode == "task_id":
             self.text = TaskIDText(len(vqid), len(vopt), h=h)
+        elif mode == "entity_only":
+            # A learned row per option and nothing else. Setting v to a constant
+            # instead makes every option score identical, so the model emits one
+            # answer for every row in the dataset -- that measures the split's
+            # label prior, not an entity shortcut, and it does so while looking
+            # like a working control.
+            self.opt = nn.Embedding(len(vopt), h)
         else:
             self.text = TextEncoder(len(vq), len(vopt), h=h)
         self.scale = h ** -0.5
@@ -131,6 +138,9 @@ class ControlScorer(nn.Module):
     def forward(self, batch):
         if self.mode == "task_id":
             v = self.text(batch["qid"], batch["opt_ids"])
+        elif self.mode == "entity_only":
+            # Which option is which, with no question content at all.
+            v = self.opt(batch["opt_ids"])
         else:
             v = self.text(batch["q_ids"], batch["q_mask"], batch["opt_ids"])
 
@@ -142,9 +152,6 @@ class ControlScorer(nn.Module):
             ) * self.scale
         else:
             u = self.entity(batch["e_ids"], batch["e_mask"])
-
-        if self.mode == "entity_only":
-            v = torch.ones_like(v) * self.scale
 
         logits = torch.einsum("bh,boh->bo", u, v) * self.scale
         logits = logits.masked_fill(~batch["opt_mask"], float("-inf"))
