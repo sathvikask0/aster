@@ -4,6 +4,8 @@
 
 Give Aster a biological context and candidate answers; its proposed role is to return structured predictions that researchers can evaluate against experiments.
 
+> 📄 **Negative Result Report:** [The text encoder isn't doing anything (September 2026)](https://sathvikask0.github.io/aster/)
+
 ## Current status
 
 **v0.1 is a working engineering prototype, not a biologically validated model.**
