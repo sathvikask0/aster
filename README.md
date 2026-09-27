@@ -62,6 +62,7 @@ Reports are in [`reports/`](reports/):
 
 | Report | What it says |
 |---|---|
+| [**STATE**](reports/STATE.md) | **Start here.** Standing summary of the architecture, what works, what failed and why, and the traps that have already bitten once. |
 | [MILESTONE_01](reports/MILESTONE_01.md) | First working pipeline. |
 | [CONTROL_RIG](reports/CONTROL_RIG.md) | The evaluation, tested on synthetic data whose ground truth we control, before it was pointed at biology. |
 | [RESOLUTION_01](reports/RESOLUTION_01.md) | v0.2 multi-task benchmark. The text encoder stops being a lookup table; it still does not clear the composition shortcut. Corrected 27 Sep 2026 — see the note at the top. |
