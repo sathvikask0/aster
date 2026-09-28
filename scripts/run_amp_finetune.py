@@ -48,7 +48,15 @@ from aster.real.finetune import (
     trainable_report, cache_frozen_prefix, pooled_suffix, snapshot_trainable_state,
 )
 from aster.real.models import CrossAttentionAster, RealAster
+from aster.real.properties import (
+    PROPERTIES, build_property_benchmark, label_agreement, load_property_table,
+    task_overlap,
+)
 
+PROPERTY_FILES = {
+    "hemolytic": Path("data/properties/hemolytic_crossval.csv"),
+    "antimicrobial": Path("data/properties/antimicrobial_mic.csv"),
+}
 MIN_SAMPLES = 400
 # Mean-pooling models only. A CLS-pooled encoder (bge, e5) would be mean-pooled
 # here, which is not how it was trained, so its vectors would be quietly wrong.
@@ -165,6 +173,18 @@ def main():
     p.add_argument("--max-peptides", type=int, default=None)
     p.add_argument("--cache-frozen-prefix", action="store_true",
                    help="Cache frozen block outputs on CPU; recompute and train the suffix")
+    p.add_argument("--benchmark", default="amp", choices=["amp", "properties"],
+                   help="'amp' holds out pathogens with presumed negatives; "
+                        "'properties' holds out a whole property and every "
+                        "negative carries a measured concentration")
+    p.add_argument("--held-out-property", default="hemolytic",
+                   help="properties benchmark: which property to hold out")
+    p.add_argument("--property-threshold", action="append", default=[],
+                   metavar="NAME=UM",
+                   help="Override a property's active/inactive cutoff, e.g. "
+                        "antimicrobial=10. Repeatable.")
+    p.add_argument("--disjoint-sequences", action="store_true",
+                   help="properties benchmark: keep a peptide out of two splits")
     p.add_argument("--negative-policy", default="matched",
                    choices=["random", "covered", "matched", "scrambled"])
     p.add_argument("--no-balance-tasks", action="store_true",
@@ -191,18 +211,60 @@ def main():
     balance = not args.no_balance_tasks
     text_note = (f"text: last {args.text_trainable_blocks} blocks trainable"
                  if args.unfreeze_text else "text: frozen")
-    print(f"AMP fine-tune | ESM-2 {args.esm} | last {args.trainable_blocks} blocks "
-          f"trainable | {text_note} | policy={args.negative_policy} | "
-          f"balance={balance} | {device}")
+    scope = (f"properties | held out: {args.held_out_property}"
+             if args.benchmark == "properties"
+             else f"AMP | policy={args.negative_policy}")
+    print(f"{scope} | ESM-2 {args.esm} | last {args.trainable_blocks} blocks "
+          f"trainable | {text_note} | balance={balance} | {device}")
+    if args.benchmark == "properties":
+        print("  Negatives carry a measured concentration, so a negative is a "
+              "recorded result rather than a missing row.")
+        print("  NOTE with one training task, task_id has a single id to learn "
+              "and is a degenerate floor here, not a meaningful control.")
     if args.unfreeze_text:
         print("  NOTE both towers are live in this run. Compare it against a "
               "protein-only run, not against the frozen reference alone, or the "
               "gain cannot be attributed to either tower.")
 
-    examples, meta = load_amp_benchmark(
-        min_samples=MIN_SAMPLES, seed=args.seed,
-        negative_policy=args.negative_policy, balance_tasks=balance,
-    )
+    if args.benchmark == "properties":
+        thresholds = {}
+        for item in args.property_threshold:
+            name, _, value = item.partition("=")
+            if name not in PROPERTIES or not value:
+                p.error(f"--property-threshold expects NAME=UM with NAME in "
+                        f"{sorted(PROPERTIES)}; got {item!r}")
+            thresholds[name] = float(value)
+        tables = {}
+        for name in sorted(PROPERTIES):
+            path = PROPERTY_FILES[name]
+            if not path.exists():
+                p.error(f"{path} is missing. See data/properties/README.md; the "
+                        "antimicrobial table is built by "
+                        "scripts/fetch_property_data.py.")
+            tables[name] = load_property_table(name, path)
+        overlap = task_overlap(tables)
+        agreement = label_agreement(tables, thresholds)
+        print(f"\nSequences measured for every property: "
+              f"{overlap['measured_for_all']:,}")
+        for pair, stats in overlap["pairs"].items():
+            print(f"  {pair}: {stats['shared']:,} shared "
+                  f"({stats['fraction_of_smaller']:.1%} of the smaller table)")
+        if agreement.get("n"):
+            disagree = sum(v for k, v in agreement["joint"].items()
+                           if len(set(k.split("|"))) > 1)
+            print(f"  labels disagree on {disagree:,} of {agreement['n']:,} "
+                  f"shared peptides ({disagree / agreement['n']:.1%}) -- the "
+                  "tasks are distinct, which is the point of this benchmark")
+        examples, meta = build_property_benchmark(
+            tables, test_tasks=(args.held_out_property,), thresholds=thresholds,
+            seed=args.seed, balance_tasks=balance,
+            disjoint_sequences=args.disjoint_sequences,
+        )
+    else:
+        examples, meta = load_amp_benchmark(
+            min_samples=MIN_SAMPLES, seed=args.seed,
+            negative_policy=args.negative_policy, balance_tasks=balance,
+        )
 
     unique_seqs = sorted({e.sequence for e in examples})
     if args.max_peptides and len(unique_seqs) > args.max_peptides:
@@ -514,6 +576,14 @@ def main():
                 "prefix_cache_dtype": str(prefix_states.dtype) if prefix_states is not None else None,
                 "min_samples": MIN_SAMPLES,
                 "seed": args.seed,
+                "benchmark": args.benchmark,
+                "held_out_property": (args.held_out_property
+                                      if args.benchmark == "properties" else None),
+                "property_thresholds": ({n: meta[n]["threshold"] for n in meta}
+                                        if args.benchmark == "properties" else None),
+                "negatives_are_measured": args.benchmark == "properties",
+                "disjoint_sequences": (args.disjoint_sequences
+                                       if args.benchmark == "properties" else None),
                 "negative_policy": args.negative_policy,
                 "balance_tasks": balance,
                 "text_encoder": text_model,
