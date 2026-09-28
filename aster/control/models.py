@@ -16,10 +16,8 @@ to explain away its results:
 
 from __future__ import annotations
 
-import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from aster.control.synthetic import ALPHABET
 
@@ -159,11 +157,3 @@ class ControlScorer(nn.Module):
 
 
 MODES = ("dual", "task_id", "frozen_entity", "question_only", "entity_only")
-
-MODE_NOTES = {
-    "dual": "the hypothesis: text encoder reads the question",
-    "task_id": "control: question as lookup id; chance on unseen questions",
-    "frozen_entity": "ablation: entity encoder not fine-tuned",
-    "question_only": "shortcut detector: label prior without the entity",
-    "entity_only": "shortcut detector: entity prior without the question",
-}

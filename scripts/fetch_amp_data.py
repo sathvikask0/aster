@@ -4,7 +4,6 @@ Curated from 7 databases (APD3, CAMP, DBAMP, DRAMP, SATPdb, YADAMP, LAMP).
 
 from __future__ import annotations
 
-import io
 import urllib.request
 from pathlib import Path
 import pandas as pd
@@ -15,7 +14,6 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "amp"
 FILES = {
     "peptide_pathogen_triple.csv": f"{RAW_BASE}/peptide_pathogen_triple.csv",
     "pathogen_description.csv": f"{RAW_BASE}/pathogen_description.csv",
-    "amp_peptide.fasta": f"{RAW_BASE}/amp_peptide.fasta",
 }
 
 

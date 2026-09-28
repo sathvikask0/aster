@@ -20,7 +20,7 @@ import torch.nn.functional as F
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from aster.control import metrics as M
-from aster.real.amp import load_amp_benchmark
+from aster.real.amp import LABEL_SEMANTICS_VERSION, load_amp_benchmark
 from aster.real.embed import embed_sequences, embed_texts, pick_device
 from aster.real.ceilings import binomial_ci95, composition_ceiling, composition_matrix
 from aster.real.models import CrossAttentionAster, RealAster
@@ -35,7 +35,6 @@ def compute_composition(seqs: list[str]) -> np.ndarray:
 
 def build_tensor_dict(examples, X, Q, A, task_to_id, device):
     """Convert dataset to device tensors."""
-    seq_to_idx = {e.sequence: i for i, e in enumerate(examples)}
     task_ids = [task_to_id.get(e.task, 0) for e in examples]
     a = np.stack([np.stack([A[(e.task, 0)], A[(e.task, 1)]]) for e in examples])
     
@@ -76,7 +75,7 @@ def train_model(model_cls, tr, va, mode, d_in, d_text, n_tasks, device,
             batch = {k: v[idx] for k, v in tr.items()}
             logits = model(batch)
             loss = F.cross_entropy(logits, batch["y"])
-            opt.backward(loss) if hasattr(opt, "backward") else loss.backward()
+            loss.backward()
             opt.step()
             opt.zero_grad()
             sched.step()
@@ -107,12 +106,26 @@ def main():
     parser.add_argument(
         "--negative-policy",
         default="random",
-        choices=["random", "covered"],
+        choices=["random", "covered", "matched"],
         help=(
-            "How presumed-negative rows are drawn. 'random' reproduces the "
-            "published v0.2 run; 'covered' restricts them to peptides assayed "
+            "How presumed-negative rows are drawn. 'random' uses the "
+            "published v0.2 sampling policy; 'covered' restricts them to peptides assayed "
             "against several other pathogens, so absence is less likely to be "
-            "database coverage rather than measured inactivity."
+            "database coverage rather than measured inactivity; 'matched' pairs "
+            "each negative to a positive of near-identical amino-acid "
+            "composition and length to reduce the composition shortcut "
+            "(measure the remaining baseline on each split)."
+        ),
+    )
+    parser.add_argument(
+        "--balance-tasks",
+        action="store_true",
+        help=(
+            "Downsample each task's positives to the negatives actually "
+            "obtained. Without it, a pathogen that exhausts its negative pool "
+            "(E. coli: 11,203 positives, 2,811 possible negatives) trains at "
+            "80-93%% positive while every held-out task is 50/50, so the label "
+            "prior carried across tasks is wrong."
         ),
     )
     args = parser.parse_args()
@@ -120,7 +133,8 @@ def main():
     device = pick_device(args.device)
     print(f"Loading 56-pathogen AMP multi-task dataset on {device}...")
     examples, meta = load_amp_benchmark(
-        min_samples=MIN_SAMPLES, seed=args.seed, negative_policy=args.negative_policy
+        min_samples=MIN_SAMPLES, seed=args.seed, negative_policy=args.negative_policy,
+        balance_tasks=args.balance_tasks,
     )
 
     unique_seqs = sorted({e.sequence for e in examples})
@@ -140,6 +154,25 @@ def main():
     print(f"Train samples: {len(train_ex):,} across {len(train_tasks)} tasks")
     print(f"Val samples:   {len(val_ex):,}")
     print(f"Held-out test: {len(test_ex):,} across {len(held_out_tasks)} tasks: {held_out_tasks}")
+
+    # The run used to print only held-out tasks, which are balanced, so a skewed
+    # training prior was invisible. Report it next to the held-out prior it has
+    # to transfer to.
+    def prior(rows):
+        return sum(e.label for e in rows) / max(len(rows), 1)
+
+    skewed = sorted(
+        (t for t in train_tasks if abs(prior([e for e in train_ex if e.task == t]) - 0.5) > 0.1),
+        key=lambda t: -len([e for e in train_ex if e.task == t]),
+    )
+    print(f"Label prior: train {prior(train_ex):.3f} | held-out {prior(test_ex):.3f}")
+    if skewed:
+        print(f"  WARN {len(skewed)} training task(s) are >10 points off balanced; "
+              f"a prior learned here does not hold on the held-out tasks:")
+        for t in skewed[:5]:
+            rows = [e for e in train_ex if e.task == t]
+            print(f"    {t:16s} n={len(rows):>6} prior={prior(rows):.3f}")
+        print("  Re-run with --balance-tasks to remove this.")
 
     # Task to integer ID (unseen tasks mapped to 0)
     task_to_id = {t: i + 1 for i, t in enumerate(train_tasks)}
@@ -290,6 +323,8 @@ def main():
                 "min_samples": MIN_SAMPLES,
                 "seed": args.seed,
                 "negative_policy": args.negative_policy,
+                "balance_tasks": args.balance_tasks,
+                "label_semantics_version": LABEL_SEMANTICS_VERSION,
                 "arch_versions": arch_versions,
                 "n_train": len(train_ex),
                 "n_val": len(val_ex),

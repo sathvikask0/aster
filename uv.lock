@@ -45,32 +45,33 @@ name = "aster-biology"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "anndata" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pandas" },
     { name = "scikit-learn" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "torch" },
     { name = "transformers" },
 ]
 
 [package.optional-dependencies]
+arc = [
+    { name = "anndata" },
+]
 test = [
     { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "anndata", specifier = ">=0.11,<0.13" },
+    { name = "anndata", marker = "extra == 'arc'", specifier = ">=0.11,<0.13" },
     { name = "numpy", specifier = ">=2,<3" },
+    { name = "pandas", specifier = ">=2,<3" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<10" },
     { name = "scikit-learn", specifier = ">=1.6,<2" },
-    { name = "scipy", specifier = ">=1.14,<2" },
     { name = "torch", specifier = ">=2.6,<3" },
     { name = "transformers", specifier = "==4.57.6" },
 ]
-provides-extras = ["test"]
+provides-extras = ["test", "arc"]
 
 [[package]]
 name = "certifi"

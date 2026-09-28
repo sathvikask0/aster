@@ -12,20 +12,10 @@ Modes mirror aster/control/models.py so results are read the same way:
 
 from __future__ import annotations
 
-import numpy as np
 import torch
 import torch.nn as nn
 
 MODES = ("dual", "task_id", "composition", "question_only", "entity_only")
-
-MODE_NOTES = {
-    "dual": "ESM-2 + frozen text encoder (the hypothesis)",
-    "task_id": "question as lookup id -- chance on an unseen task",
-    "composition": "amino-acid frequencies instead of ESM-2",
-    "question_only": "label prior; never sees the peptide",
-    "entity_only": "peptide prior; never sees the question",
-}
-
 
 class Tower(nn.Module):
     def __init__(self, d_in, h, depth=2, p=0.1):

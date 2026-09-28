@@ -11,7 +11,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from aster.control.models import MODE_NOTES, MODES
 from aster.control.synthetic import build
 from aster.control import splits as S
 from aster.control.harness import run_grid, verdict

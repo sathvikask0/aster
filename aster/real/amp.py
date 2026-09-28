@@ -9,34 +9,36 @@ tables are **presence-only**: a row says a peptide was reported active against a
 pathogen, and there is no row anywhere that reports a measured inactivity. Every
 negative in this benchmark is therefore a *presumed* negative, inferred from the
 absence of a record, and absence is partly a function of which peptide-pathogen
-pairs anyone bothered to assay. Two policies are offered:
+pairs anyone bothered to assay. Three policies are offered:
 
-  random   (default; reproduces the published v0.2 run) any peptide without a
+  random   (default; same sampling policy as v0.2) any peptide without a
            record for this pathogen may be drawn as a negative, including one
            that was simply never tested against it.
   covered  a peptide may only be drawn as a negative for this pathogen if it has
            records for at least `min_coverage` other pathogens, so it is at
            least a well-studied peptide whose silence here is more informative.
   matched  as `covered`, but each negative is greedily matched to a positive by
-           amino-acid composition and length, so that a bag-of-amino-acids probe
-           cannot separate the two classes. This drives the shortcut ceiling to
-           chance by construction, leaving residue order and prompt semantics as
-           the only things left to explain any lift.
+           amino-acid composition and length to reduce that shortcut. Measure
+           the remaining composition baseline on every constructed split.
 
-Neither policy manufactures a measured negative. `covered` narrows the coverage
+None of these policies manufactures a measured negative. `covered` narrows the coverage
 confound; it does not remove it.
+
+Labels are option indices: 0 selects the presumed-inactive answer and 1 the
+reported-active answer. Version 1 put the answer texts in the opposite order,
+so the training loss rewarded the wrong answer text.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-import re
 import numpy as np
 import pandas as pd
 
 AA = set("ACDEFGHIKLMNPQRSTVWY")
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "amp"
+LABEL_SEMANTICS_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -45,7 +47,7 @@ class Example:
     task: str
     question: str
     options: tuple[str, ...]
-    label: int
+    label: int  # Index into options; 0 = presumed inactive, 1 = reported active.
     split: str  # "train", "val", "test"
 
 
@@ -78,9 +80,11 @@ def build_mechanistic_prompt(pathogen: str, p_type: str, desc: str) -> tuple[str
             f"growth of pathogenic {pathogen} ({first_sentence})?"
         )
 
+    # Cross-entropy consumes option indices directly. Keep the answer order
+    # aligned with the activity labels, including the reported positive prior.
     answers = (
-        "it potently disrupts the membrane barrier and inhibits growth",
         "it fails to disrupt the microbial membrane",
+        "it potently disrupts the membrane barrier and inhibits growth",
     )
     return q, answers
 
@@ -108,9 +112,9 @@ def match_negatives(
     """Greedy 1:1 nearest-neighbour matching of negatives to positives.
 
     Each positive claims its closest unused candidate in composition+length
-    space. A positive whose nearest candidate is further than `caliper` gets no
-    match and is dropped by the caller's pairing, which keeps the classes
-    balanced rather than silently admitting an unmatched negative.
+    space. A positive whose nearest candidate is further than `caliper` adds no
+    negative. The loader can separately downsample positives with balance_tasks;
+    it does not retain pair identities or guarantee identical class composition.
     """
     if not pos_seqs or not candidates:
         return []
@@ -143,8 +147,18 @@ def load_amp_benchmark(
     negative_policy: str = "random",
     min_coverage: int = 3,
     match_caliper: float = 0.35,
+    balance_tasks: bool = False,
 ) -> tuple[list[Example], dict[str, dict]]:
-    """Load and format the multi-task AMP dataset with mechanistic prompts."""
+    """Load and format the multi-task AMP dataset with mechanistic prompts.
+
+    `balance_tasks` downsamples a task's positives to the number of negatives
+    actually obtained. It is off by default because switching it on changes
+    every published number. Leaving it off is not harmless: a high-prevalence
+    pathogen exhausts its negative pool (E. coli has 11,203 positives and only
+    2,811 peptides with no E. coli record), so its rows arrive 80-93% positive
+    and the label prior a model reads off the training tasks does not hold on
+    the balanced held-out ones. See `label_prior` in the returned metadata.
+    """
     data_dir = Path(data_dir)
     triples_path = data_dir / "peptide_pathogen_triple.csv"
     desc_path = data_dir / "pathogen_description.csv"
@@ -231,10 +245,24 @@ def load_amp_benchmark(
             rng.shuffle(neg_candidates)
             neg_seqs = neg_candidates[:len(pos_seqs)]
 
+        # The pairing above is 1:1 only while candidates last. A pathogen assayed
+        # against most of the library runs out, and under "matched" a positive with
+        # no candidate inside the caliper goes unpaired, so the classes arrive
+        # skewed unless the surplus positives are dropped.
+        if balance_tasks and len(neg_seqs) < len(pos_seqs):
+            keep = rng.choice(len(pos_seqs), size=len(neg_seqs), replace=False)
+            pos_seqs = [pos_seqs[i] for i in sorted(keep)]
+
+        n_pos, n_neg = len(pos_seqs), len(neg_seqs)
+        task_metadata[task]["n_positive"] = n_pos
+        task_metadata[task]["n_negative"] = n_neg
+        task_metadata[task]["label_prior"] = n_pos / max(n_pos + n_neg, 1)
+        task_metadata[task]["negatives_exhausted"] = n_neg < n_pos
+
         # Determine train/val/test split
         split = "test" if task in test_tasks else "train"
 
-        # Add positives (label 1 = options[0])
+        # Add positives (label 1 selects the active answer at options[1]).
         for s in pos_seqs:
             # If training task, carve out 15% validation
             row_split = split
@@ -242,7 +270,7 @@ def load_amp_benchmark(
                 row_split = "val"
             examples.append(Example(sequence=s, task=task, question=question, options=options, label=1, split=row_split))
 
-        # Add negatives (label 0 = options[1])
+        # Add presumed negatives (label 0 selects options[0]).
         for s in neg_seqs:
             row_split = split
             if split == "train" and rng.random() < 0.15:

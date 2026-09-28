@@ -14,7 +14,7 @@ import torch
 import torch.nn.functional as F
 
 from aster.control.tensors import TensorSet
-from aster.control.models import MODE_NOTES, MODES, ControlScorer, build_vocabs
+from aster.control.models import MODES, ControlScorer, build_vocabs
 from aster.control import metrics as M
 
 

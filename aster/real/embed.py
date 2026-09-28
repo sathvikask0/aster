@@ -106,10 +106,8 @@ def embed_texts(texts, model="prajjwal1/bert-tiny", device="auto",
                 cache_dir="~/.cache/aster", verbose=True):
     """Mean-pooled sentence embeddings for questions and answer phrases.
 
-    Frozen by default. With only four tasks, fine-tuning the text encoder on
-    three of them would destroy exactly the general semantics the held-out task
-    depends on -- the encoder would learn the training tasks' wording instead of
-    what the words mean.
+    Frozen and computed offline. Cached output vectors cannot carry gradients
+    back to the encoder; fine-tuning needs a separate training-time forward pass.
     """
     import torch
     from transformers import AutoModel, AutoTokenizer

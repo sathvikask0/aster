@@ -5,12 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aster-biology"
 version = "0.1.0"
-description = "Experimental typed biological decisions with jointly trained encoders"
+description = "AMP decision benchmarks, evaluation controls, and a joint-encoder cell prototype"
 requires-python = ">=3.11"
-dependencies = ["torch>=2.6,<3", "transformers==4.57.6", "numpy>=2,<3", "anndata>=0.11,<0.13", "scikit-learn>=1.6,<2", "scipy>=1.14,<2"]
+dependencies = ["torch>=2.6,<3", "transformers==4.57.6", "numpy>=2,<3", "pandas>=2,<3", "scikit-learn>=1.6,<2"]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]
+arc = ["anndata>=0.11,<0.13"]
 
 [tool.setuptools.packages.find]
 include = ["aster*"]

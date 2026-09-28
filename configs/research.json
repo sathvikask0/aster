@@ -1,8 +1,0 @@
-{
-  "protein_model": "facebook/esm2_t33_650M_UR50D",
-  "text_model": "answerdotai/ModernBERT-large",
-  "protein_last_layers": 3,
-  "text_last_layers": 3,
-  "cell_features": 1000,
-  "latent_dim": 256
-}

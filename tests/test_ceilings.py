@@ -74,3 +74,48 @@ def test_match_negatives_respects_the_caliper_and_does_not_reuse():
 
 def test_binomial_ci_shrinks_with_n():
     assert binomial_ci95(0.5, 100) > binomial_ci95(0.5, 10_000)
+
+
+def _data_available():
+    from aster.real.amp import DATA_DIR
+    return (DATA_DIR / "peptide_pathogen_triple.csv").exists()
+
+
+needs_data = pytest.mark.skipif(not _data_available(), reason="AMP triples not fetched")
+
+
+@needs_data
+def test_loader_reports_the_label_prior_it_actually_built():
+    """A skewed training prior must be visible in metadata, not inferred later.
+
+    E. coli has more positives than the library has peptides without an E. coli
+    record, so its negatives are exhausted and its rows cannot be 1:1.
+    """
+    from collections import Counter
+
+    from aster.real.amp import load_amp_benchmark
+
+    examples, meta = load_amp_benchmark(min_samples=400, seed=42)
+    for task, m in meta.items():
+        counts = Counter(e.label for e in examples if e.task == task)
+        assert m["n_positive"] == counts[1]
+        assert m["n_negative"] == counts[0]
+        assert m["label_prior"] == pytest.approx(counts[1] / (counts[1] + counts[0]))
+        assert m["negatives_exhausted"] == (counts[0] < counts[1])
+
+    assert meta["E.coli"]["negatives_exhausted"], "expected E.coli to run out of negatives"
+    assert meta["E.coli"]["label_prior"] > 0.7
+
+
+@needs_data
+@pytest.mark.parametrize("policy", ["random", "covered", "matched"])
+def test_balance_tasks_pairs_every_task(policy):
+    """With balancing on, no task may arrive skewed -- under any policy."""
+    from aster.real.amp import load_amp_benchmark
+
+    _, meta = load_amp_benchmark(
+        min_samples=400, seed=42, negative_policy=policy, balance_tasks=True
+    )
+    for task, m in meta.items():
+        assert m["n_positive"] == m["n_negative"], f"{task} unbalanced under {policy}"
+        assert not m["negatives_exhausted"]
