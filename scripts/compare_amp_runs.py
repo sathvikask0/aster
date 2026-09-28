@@ -45,7 +45,7 @@ def comparability(runs):
 
     if len(ok) > 1:
         for key in ("negative_policy", "balance_tasks", "esm", "min_samples",
-                    "text_encoder_trainable"):
+                    "text_encoder_trainable", "text_encoder"):
             values = {name: ok_run["config"].get(key) for name, ok_run in ok}
             if len(set(values.values())) > 1:
                 problems.append(f"differing {key}: {values}")

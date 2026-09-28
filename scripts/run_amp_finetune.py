@@ -49,7 +49,13 @@ from aster.real.finetune import (
 from aster.real.models import CrossAttentionAster, RealAster
 
 MIN_SAMPLES = 400
-TEXT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+# Mean-pooling models only. A CLS-pooled encoder (bge, e5) would be mean-pooled
+# here, which is not how it was trained, so its vectors would be quietly wrong.
+TEXT_MODELS = {
+    "minilm": "sentence-transformers/all-MiniLM-L6-v2",   # 6L, 384d
+    "mpnet": "sentence-transformers/all-mpnet-base-v2",   # 12L, 768d
+    "distilroberta": "sentence-transformers/all-distilroberta-v1",  # 6L, 768d
+}
 
 
 def batches(n, bs, shuffle=False, generator=None):
@@ -141,6 +147,9 @@ def main():
                    help="Also put the text encoder in the graph. Run this AFTER a "
                         "protein-only run: if both towers move at once and the "
                         "number goes up, nothing says which one did it.")
+    p.add_argument("--text-model", default="minilm",
+                   help="minilm (6L/384d), mpnet (12L/768d), distilroberta "
+                        "(6L/768d), or any mean-pooled HF sentence encoder id")
     p.add_argument("--text-trainable-blocks", type=int, default=1)
     p.add_argument("--text-lr", type=float, default=None,
                    help="Defaults to --encoder-lr")
@@ -158,6 +167,7 @@ def main():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out", default="reports/amp_finetune_results.json")
     args = p.parse_args()
+    text_model = TEXT_MODELS.get(args.text_model, args.text_model)
 
     device = pick_device(args.device)
     balance = not args.no_balance_tasks
@@ -200,10 +210,10 @@ def main():
 
     # Text side: frozen throughout, exactly as on the cached path.
     questions = {t: meta[t]["question"] for t in meta}
-    q_mat = embed_texts([questions[t] for t in meta], model=TEXT_MODEL, device=device)
+    q_mat = embed_texts([questions[t] for t in meta], model=text_model, device=device)
     q_map = {t: q_mat[i] for i, t in enumerate(meta)}
     ans_texts = sorted({o for t in meta for o in meta[t]["options"][:2]})
-    ans_mat = embed_texts(ans_texts, model=TEXT_MODEL, device=device)
+    ans_mat = embed_texts(ans_texts, model=text_model, device=device)
     ans_map = dict(zip(ans_texts, ans_mat))
     A_map = {(t, i): ans_map[meta[t]["options"][i]] for t in meta for i in (0, 1)}
     d_text = q_mat.shape[1]
@@ -265,7 +275,7 @@ def main():
     question_order = sorted(meta)
     text_tables, text_report = None, None
     if args.unfreeze_text:
-        _, text_tok = load_text_encoder(TEXT_MODEL, args.text_trainable_blocks, device)
+        _, text_tok = load_text_encoder(text_model, args.text_trainable_blocks, device)
         q_ids, q_mask = tokenize_sequences(
             [questions[t] for t in question_order], text_tok, max_len=64)
         answer_order = sorted({o for t in meta for o in meta[t]["options"][:2]})
@@ -284,7 +294,7 @@ def main():
             live_tensors[split]["a_idx"] = torch.tensor(
                 [[a_pos[meta[r.task]["options"][k]] for k in (0, 1)] for r in rows],
                 dtype=torch.long, device=device)
-        probe, _ = load_text_encoder(TEXT_MODEL, args.text_trainable_blocks, device)
+        probe, _ = load_text_encoder(text_model, args.text_trainable_blocks, device)
         text_report = trainable_report(probe)
         print(f"Text encoder: {text_report['trainable_params']:,} of "
               f"{text_report['total_params']:,} params trainable "
@@ -310,7 +320,7 @@ def main():
         text_enc = None
         if args.unfreeze_text and mode in LIVE_TEXT_MODES:
             text_enc, _ = load_text_encoder(
-                TEXT_MODEL, args.text_trainable_blocks, device)
+                text_model, args.text_trainable_blocks, device)
         model = LiveAster(
             head, enc, text_encoder=text_enc,
             questions=text_tables["questions"] if text_enc is not None else None,
@@ -444,7 +454,8 @@ def main():
                 "seed": args.seed,
                 "negative_policy": args.negative_policy,
                 "balance_tasks": balance,
-                "text_encoder": TEXT_MODEL,
+                "text_encoder": text_model,
+                "text_encoder_dim": int(d_text),
                 "text_encoder_trainable": bool(args.unfreeze_text),
                 "text_trainable_blocks": args.text_trainable_blocks if args.unfreeze_text else 0,
                 "text_lr": (args.text_lr if args.text_lr is not None else args.encoder_lr)

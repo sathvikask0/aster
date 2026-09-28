@@ -61,3 +61,11 @@ def test_mixing_frozen_and_trainable_text_is_flagged():
     b["config"]["text_encoder_trainable"] = True
     _, problems = comparability([("protein.json", a), ("both.json", b)])
     assert any("text_encoder_trainable" in p for p in problems)
+
+
+def test_a_different_text_encoder_is_not_comparable():
+    a, b = run(), run()
+    a["config"]["text_encoder"] = "sentence-transformers/all-MiniLM-L6-v2"
+    b["config"]["text_encoder"] = "sentence-transformers/all-mpnet-base-v2"
+    _, problems = comparability([("minilm.json", a), ("mpnet.json", b)])
+    assert any("text_encoder" in p for p in problems)
