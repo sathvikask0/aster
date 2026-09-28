@@ -94,6 +94,39 @@ the published v0.2 run), `covered` (only well-assayed peptides), or `matched`
 (composition- and length-matched to the positives, which drives the shortcut
 ceiling to chance).
 
+## Fine-tuning the protein encoder
+
+Every AMP number so far was produced over cached ESM-2 vectors, so the protein
+encoder never learned anything about peptides. `run_amp_finetune.py` puts it back
+in the graph with its last blocks trainable:
+
+```bash
+uv run python scripts/run_amp_finetune.py --esm 8M --trainable-blocks 2 \
+    --negative-policy matched --epochs 6
+```
+
+Three things make the output readable as evidence rather than as a number.
+
+`entity_only` gets a live encoder too. It never sees the question, and it is the
+control that detects "answers without reading the question". Unfreezing only the
+hypothesis model would hand it capacity the control was denied and call the
+difference transfer. If `entity_only_live` moves as much, the fine-tune bought a
+better peptide classifier and said nothing about typed decisions.
+
+`*_live` is reported next to `*_frozen` — same head, same data, same reading
+rule, one factor different. That pair is the only thing in the report that
+isolates unfreezing. `task_id` and `question_only` stay frozen and are reference
+rows, not matched controls. Pass `--skip-frozen-reference` to drop the pair, at
+the cost of an unattributable number.
+
+`encoder_drift` is printed beside each accuracy: the mean absolute change in the
+trainable encoder weights. A gain with drift near zero is a head effect wearing a
+fine-tuning label. A large drift usually means the encoder was destroyed and the
+head compensated.
+
+The text tower stays frozen here. Unfreezing it as well is a separate
+experiment, and mixing it in would leave neither result attributable.
+
 ## Training on experimental data
 
 ```bash

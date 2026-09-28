@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from aster.real.amp import load_amp_benchmark
-from scripts.run_amp_multitask import build_tensor_dict
+from aster.real.evaluate import build_tensor_dict
 
 
 @pytest.fixture

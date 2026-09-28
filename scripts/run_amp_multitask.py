@@ -19,10 +19,12 @@ import torch.nn.functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from aster.control import metrics as M
 from aster.real.amp import LABEL_SEMANTICS_VERSION, load_amp_benchmark
 from aster.real.embed import embed_sequences, embed_texts, pick_device
-from aster.real.ceilings import binomial_ci95, composition_ceiling, composition_matrix
+from aster.real.ceilings import composition_ceiling, composition_matrix
+from aster.real.evaluate import (
+    REPORTING_RULE, build_tensor_dict, evaluate, print_result,
+)
 from aster.real.models import CrossAttentionAster, RealAster
 
 MIN_SAMPLES = 400
@@ -31,26 +33,6 @@ MIN_SAMPLES = 400
 def compute_composition(seqs: list[str]) -> np.ndarray:
     """20-dim amino-acid frequency vector (shared with the ceiling estimator)."""
     return composition_matrix(seqs).astype(np.float32)
-
-
-def build_tensor_dict(examples, X, Q, A, task_to_id, device):
-    """Convert dataset to device tensors."""
-    task_ids = [task_to_id.get(e.task, 0) for e in examples]
-    a = np.stack([np.stack([A[(e.task, 0)], A[(e.task, 1)]]) for e in examples])
-    
-    x_tensor = torch.from_numpy(X).float().to(device)
-    q_tensor = torch.from_numpy(np.stack([Q[e.task] for e in examples])).float().to(device)
-    a_tensor = torch.from_numpy(a).float().to(device)
-    task_id_tensor = torch.tensor(task_ids, dtype=torch.long, device=device)
-    y_tensor = torch.tensor([e.label for e in examples], dtype=torch.long, device=device)
-
-    return {
-        "x": x_tensor,
-        "q_emb": q_tensor,
-        "a_emb": a_tensor,
-        "task_id": task_id_tensor,
-        "y": y_tensor,
-    }
 
 
 def train_model(model_cls, tr, va, mode, d_in, d_text, n_tasks, device,
@@ -263,53 +245,12 @@ def main():
             te_logits = model(te_tensor).cpu().numpy()
             va_logits = model(va_tensor).cpu().numpy()
 
-        y_true = te_tensor["y"].cpu().numpy()
-        y_val = va_tensor["y"].cpu().numpy()
-
-        # Temperature is fit on validation and applied to test. It cannot make a
-        # wrong model right; it only stops a model lying about how sure it is.
-        temperature = M.fit_temperature(va_logits, y_val)
-        probs = M.softmax(te_logits, temperature)
-        preds = probs.argmax(1)
-
-        raw = M.compute(M.softmax(te_logits), y_true).as_dict()
-        calibrated = M.compute(probs, y_true).as_dict()
-        overall_acc = calibrated["accuracy"]
-        
-        # Per-task accuracy
-        per_task = {}
-        for task in held_out_tasks:
-            idx = np.array([i for i, e in enumerate(test_ex) if e.task == task])
-            task_acc = float(np.mean(preds[idx] == y_true[idx]))
-            task_lift = task_acc - ceilings[task]["ceiling"]
-            per_task[task] = {
-                "acc": task_acc,
-                "acc_ci95": binomial_ci95(task_acc, len(idx)),
-                "lift": task_lift,
-                "lift_is_significant": bool(
-                    abs(task_lift) > binomial_ci95(task_acc, len(idx))
-                    + ceilings[task]["ceiling_ci95"]
-                ),
-            }
-
-        results[name] = {
-            "overall_accuracy": overall_acc,
-            "temperature": float(temperature),
-            "calibration": {"raw": raw, "calibrated": calibrated},
-            "per_task": per_task,
-        }
-        print(
-            f"  [{name:16s}] Acc: {overall_acc:.3f} | ECE: {calibrated['ece']:.3f} "
-            f"| overconfidence: {calibrated['overconfidence']:+.3f} (T={temperature:.2f})"
+        results[name] = evaluate(
+            te_logits, va_logits,
+            te_tensor["y"].cpu().numpy(), va_tensor["y"].cpu().numpy(),
+            test_ex, held_out_tasks, ceilings,
         )
-        if calibrated["overconfidence"] > 0.05:
-            print(
-                f"    WARN {name}: confident {calibrated['mean_confidence']:.3f} but right "
-                f"{calibrated['accuracy']:.3f}. Do not spend bench time on this."
-            )
-        for t in held_out_tasks:
-            flag = "" if per_task[t]["lift_is_significant"] else "  (inside intervals)"
-            print(f"    {t:14s}: {per_task[t]['acc']:.3f} (lift vs ceiling: {per_task[t]['lift']:+.3f}){flag}")
+        print_result(name, results[name], held_out_tasks)
 
     # Output report JSON
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -330,11 +271,7 @@ def main():
                 "n_val": len(val_ex),
                 "n_test": len(test_ex),
             },
-            "reporting_rule": (
-                "Every claim is a margin over 'ceiling' (max of majority and the "
-                "out-of-fold composition probe), never over task_id. A lift smaller "
-                "than the combined 95% intervals is not a result."
-            ),
+            "reporting_rule": REPORTING_RULE,
             "held_out_tasks": held_out_tasks,
             "ceilings": ceilings,
             "results": results,
