@@ -22,8 +22,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aster.real.amp import LABEL_SEMANTICS_VERSION, load_amp_benchmark
 from aster.real.embed import embed_sequences, embed_texts, pick_device
 from aster.real.ceilings import composition_ceiling, composition_matrix
+from aster.real import ablation
 from aster.real.evaluate import (
-    REPORTING_RULE, build_tensor_dict, evaluate, print_result,
+    REPORTING_RULE, build_tensor_dict, evaluate, mechanism_swap, print_result,
 )
 from aster.real.models import CrossAttentionAster, RealAster
 
@@ -222,6 +223,12 @@ def main():
             f"| Ceiling: {c['ceiling']:.3f} +/-{c['ceiling_ci95']:.3f}"
         )
 
+    swap = ablation.swap_map(meta, held_out_tasks, seed=args.seed)
+    print("\n--- Mechanism-swap assignment (donor prompts) ---")
+    for line in ablation.describe(swap, meta):
+        print(f"  {line}")
+    swapped_te = ablation.swapped_question_tensor(te_tensor, test_ex, q_emb_map, swap, device)
+
     results = {}
     models_to_test = [
         ("cross_attention", CrossAttentionAster, "dual"),
@@ -250,7 +257,21 @@ def main():
             te_tensor["y"].cpu().numpy(), va_tensor["y"].cpu().numpy(),
             test_ex, held_out_tasks, ceilings,
         )
+        if mode not in ("entity_only", "task_id"):
+            def _fwd(m, t):
+                with torch.no_grad():
+                    return m(t).cpu().numpy()
+            results[name]["mechanism_swap"] = mechanism_swap(
+                model, te_tensor, swapped_te, test_ex,
+                te_tensor["y"].cpu().numpy(), held_out_tasks, _fwd, ablation,
+            )
         print_result(name, results[name], held_out_tasks)
+        ms = results[name].get("mechanism_swap")
+        if ms:
+            print(f"    mechanism swap: {ms['own_prompt_accuracy']:.3f} -> "
+                  f"{ms['swapped_prompt_accuracy']:.3f} (drop {ms['drop']:+.3f}"
+                  f"{'' if ms['drop_is_significant'] else ', inside intervals'})")
+            print(f"      {ms['reading']}")
 
     # Output report JSON
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -274,6 +295,8 @@ def main():
             "reporting_rule": REPORTING_RULE,
             "held_out_tasks": held_out_tasks,
             "ceilings": ceilings,
+            "mechanism_swap_map": swap,
+            "prompt_families": {t: meta[t].get("prompt_family") for t in meta},
             "results": results,
         }, f, indent=2)
     print(f"\nSaved results to {args.out}")

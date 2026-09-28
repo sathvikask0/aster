@@ -37,7 +37,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aster.real.amp import LABEL_SEMANTICS_VERSION, load_amp_benchmark
 from aster.real.ceilings import binomial_ci95, composition_ceiling
 from aster.real.embed import embed_sequences, embed_texts, pick_device
-from aster.real.evaluate import REPORTING_RULE, build_tensor_dict, evaluate, print_result
+from aster.real import ablation
+from aster.real.evaluate import (
+    REPORTING_RULE, build_tensor_dict, evaluate, mechanism_swap, print_result,
+)
 from aster.real.finetune import (
     LiveEntityAster, encoder_drift, load_protein_encoder, param_groups,
     snapshot_encoder, tokenize_sequences, trainable_report,
@@ -204,6 +207,13 @@ def main():
               f"| composition {c['composition_oof']:.3f} "
               f"| ceiling {c['ceiling']:.3f} +/-{c['ceiling_ci95']:.3f}")
 
+    # Mechanism-swap: each held-out target is scored a second time with a prompt
+    # from another family. Pre-registered outcome 5; eval-only, so it is cheap.
+    swap = ablation.swap_map(meta, held_out_tasks, seed=args.seed)
+    print("\n--- Mechanism-swap assignment (donor prompts) ---")
+    for line in ablation.describe(swap, meta):
+        print(f"  {line}")
+
     results, run_meta = {}, {}
     y_test = np.array([e.label for e in test_ex])
     y_val = np.array([e.label for e in val_ex])
@@ -257,8 +267,22 @@ def main():
         )
         res["encoder_drift"] = drift
         res["encoder"] = {"live": True, "arch_version": getattr(cls, "ARCH_VERSION", 1)}
+        if mode != "entity_only":
+            res["mechanism_swap"] = mechanism_swap(
+                model, live_tensors["test"],
+                ablation.swapped_question_tensor(
+                    live_tensors["test"], test_ex, q_map, swap, device),
+                test_ex, y_test, held_out_tasks,
+                lambda m, t: forward_all(m, t, args.batch_size, device), ablation,
+            )
         results[name] = res
         print_result(name, res, held_out_tasks, extra=f" | drift={drift:.2e}")
+        if "mechanism_swap" in res:
+            ms = res["mechanism_swap"]
+            print(f"    mechanism swap: {ms['own_prompt_accuracy']:.3f} -> "
+                  f"{ms['swapped_prompt_accuracy']:.3f} (drop {ms['drop']:+.3f}"
+                  f"{'' if ms['drop_is_significant'] else ', inside intervals'})")
+            print(f"      {ms['reading']}")
         if drift < 1e-8:
             print("    WARN encoder did not move. This is not a fine-tuning result.")
         del model, enc
@@ -298,8 +322,21 @@ def main():
                 y_test, y_val, test_ex, held_out_tasks, ceilings,
             )
             res["encoder"] = {"live": False, "arch_version": getattr(cls, "ARCH_VERSION", 1)}
+            if mode not in ("entity_only", "task_id"):
+                res["mechanism_swap"] = mechanism_swap(
+                    head, frozen_tensors["test"],
+                    ablation.swapped_question_tensor(
+                        frozen_tensors["test"], test_ex, q_map, swap, device),
+                    test_ex, y_test, held_out_tasks,
+                    lambda m, t: forward_all(m, t, 4096, device), ablation,
+                )
             results[name] = res
             print_result(name, res, held_out_tasks)
+            if "mechanism_swap" in res:
+                ms = res["mechanism_swap"]
+                print(f"    mechanism swap: {ms['own_prompt_accuracy']:.3f} -> "
+                      f"{ms['swapped_prompt_accuracy']:.3f} (drop {ms['drop']:+.3f}"
+                      f"{'' if ms['drop_is_significant'] else ', inside intervals'})")
 
         for live, frozen in (("cross_attention_live", "cross_attention_frozen"),
                              ("dual_live", "dual_frozen"),
@@ -346,6 +383,8 @@ def main():
             ],
             "held_out_tasks": held_out_tasks,
             "ceilings": ceilings,
+            "mechanism_swap_map": swap,
+            "prompt_families": {t: meta[t].get("prompt_family") for t in meta},
             "deltas": run_meta,
             "results": results,
         }, f, indent=2)

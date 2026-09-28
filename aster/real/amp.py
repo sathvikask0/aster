@@ -51,25 +51,43 @@ class Example:
     split: str  # "train", "val", "test"
 
 
+def prompt_family(p_type: str, desc: str) -> str:
+    """Which mechanism family a target's prompt is drawn from.
+
+    Exposed because the mechanism-swap ablation has to hand a target a prompt
+    from a *different* family, and a second copy of this branching would
+    silently disagree with the prompts actually built.
+    """
+    clean_desc = str(desc).strip().replace('"', '').lower()
+    if "Gram-negative" in str(p_type):
+        return "gram_negative"
+    if "Gram-positive" in str(p_type):
+        return "gram_positive"
+    if "Fungus" in str(p_type) or "yeast" in clean_desc or "mold" in clean_desc:
+        return "fungal"
+    return "generic"
+
+
 def build_mechanistic_prompt(pathogen: str, p_type: str, desc: str) -> tuple[str, tuple[str, str]]:
     """Build a biophysical prompt incorporating cell-envelope and membrane mechanics."""
     # Clean description to first 1-2 informative sentences
     clean_desc = desc.strip().replace('"', '')
     first_sentence = clean_desc.split(".")[0].strip()
+    family = prompt_family(p_type, desc)
 
-    if "Gram-negative" in str(p_type):
+    if family == "gram_negative":
         q = (
             f"Does this peptide carry cationic amphipathic structure capable of disrupting the "
             f"negatively-charged lipopolysaccharide (LPS) outer membrane and thin peptidoglycan layer of "
             f"Gram-negative {pathogen} ({first_sentence})?"
         )
-    elif "Gram-positive" in str(p_type):
+    elif family == "gram_positive":
         q = (
             f"Does this peptide carry sufficient positive charge and hydrophobicity to traverse the "
             f"thick porous peptidoglycan cell wall and lyse the cytoplasmic membrane of "
             f"Gram-positive {pathogen} ({first_sentence})?"
         )
-    elif "Fungus" in str(p_type) or "yeast" in clean_desc.lower() or "mold" in clean_desc.lower():
+    elif family == "fungal":
         q = (
             f"Does this peptide bind and permeabilize the chitin and beta-glucan cell wall or "
             f"ergosterol membrane barrier of fungal pathogen {pathogen} ({first_sentence})?"
@@ -226,6 +244,7 @@ def load_amp_benchmark(
         question, options = build_mechanistic_prompt(task, p_type, desc)
         task_metadata[task] = {
             "type": p_type,
+            "prompt_family": prompt_family(p_type, desc),
             "question": question,
             "options": options,
             "is_held_out": task in test_tasks,

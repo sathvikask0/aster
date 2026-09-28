@@ -127,6 +127,44 @@ head compensated.
 The text tower stays frozen here. Unfreezing it as well is a separate
 experiment, and mixing it in would leave neither result attributable.
 
+## Does the prompt work as biology, or as a name?
+
+Both AMP runners now score every question-reading model a second time with a
+prompt from a *different* mechanism family — the fungal chitin/ergosterol prompt
+for a Gram-negative target, the LPS prompt for the fungal one. Donors are drawn
+from the training tasks, so the swapped prompt is text the model has seen and the
+result cannot be dismissed as out-of-distribution.
+
+If accuracy survives the swap, the mechanism language bought nothing: the prompt
+is a task identifier that happens to be spelled in English. That reading is in
+`aster/real/ablation.py` as `read_swap`, written before any numbers, so it cannot
+be re-decided afterwards. A drop is a necessary condition for the mechanism
+mattering, not a sufficient one — sensitivity to prompt text is not correct use
+of mechanism.
+
+The ablation is eval-only, so it costs one extra forward pass. `entity_only` and
+`task_id` are excluded because neither reads the question.
+
+## Comparing runs
+
+One run is one seed and no idea how much of the number is the seed.
+
+```bash
+for s in 42 43 44; do
+  uv run python scripts/run_amp_finetune.py --seed $s --out reports/ft_s$s.json
+done
+uv run python scripts/compare_amp_runs.py reports/ft_s4*.json
+```
+
+`compare_amp_runs.py` prints, per model, the spread across runs, whether the lift
+over the ceiling is positive in every run, and whether it exceeds the seed spread
+— a lift smaller than the spread is not a finding about the model. It also
+refuses to average runs that are not comparable: a report with no
+`label_semantics_version` predates the answer-label fix, and differing negative
+policy or encoder means the runs measure different things. Those are listed as
+incomparable rather than folded into a mean. It flags the case that matters most
+on the fine-tuning path: `entity_only` gaining as much as the hypothesis model.
+
 ## Training on experimental data
 
 ```bash

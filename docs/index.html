@@ -179,6 +179,10 @@
         The fix is not a better model but a benchmark where the shortcut does not exist. Each positive claims its nearest unused negative in composition-and-length space, which drives the composition ceiling to chance <strong>by construction</strong>: 0.721 &rarr; 0.522 on the fungal target, and 0.513&ndash;0.540 across all five. Whatever score survives has to come from residue order and prompt semantics. It is entirely possible that everything collapses to chance, and that would say this dataset was never able to test the premise.
       </p>
 
+      <p>
+        Three pieces of that design are now built and unrun. The <strong>mechanism-swap ablation</strong> scores every question-reading model a second time with a prompt from another mechanism family, with donors drawn from the training tasks and the reading committed in code before any numbers exist &mdash; if accuracy survives, the prompt is a task identifier spelled in English. The <strong>protein encoder can now be fine-tuned</strong> rather than read from cache, with the same trainable blocks given to <code>entity_only</code> so the control is not starved of capacity the hypothesis model gets. And <strong>seed spread is now measurable</strong>: a lift smaller than the spread across seeds is not a finding about the model.
+      </p>
+
       <p><a href="in-progress.html" style="color: #a78bfa; font-weight: 500;">The full design, the pre-check table and the pre-registered outcomes &rarr;</a></p>
     </section>
 

@@ -96,3 +96,36 @@ REPORTING_RULE = (
     "out-of-fold composition probe), never over task_id. A lift smaller "
     "than the combined 95% intervals is not a result."
 )
+
+
+def accuracy_by_task(preds, y_true, examples, tasks):
+    """Plain accuracy per task, for ablations that do not need calibration."""
+    out = {}
+    for task in tasks:
+        idx = np.array([i for i, e in enumerate(examples) if e.task == task])
+        if idx.size == 0:
+            continue
+        acc = float(np.mean(preds[idx] == y_true[idx]))
+        out[task] = {"acc": acc, "acc_ci95": binomial_ci95(acc, len(idx)), "n": int(idx.size)}
+    return out
+
+
+def mechanism_swap(model, tensors, swapped, examples, y_true, held_out_tasks,
+                   forward, ablation):
+    """Score the test split twice -- own prompt, then a wrong-family prompt."""
+    own = forward(model, tensors).argmax(1)
+    other = forward(model, swapped).argmax(1)
+
+    own_acc = float(np.mean(own == y_true))
+    swapped_acc = float(np.mean(other == y_true))
+    ci = binomial_ci95(own_acc, len(y_true)) + binomial_ci95(swapped_acc, len(y_true))
+    return {
+        "own_prompt_accuracy": own_acc,
+        "swapped_prompt_accuracy": swapped_acc,
+        "drop": own_acc - swapped_acc,
+        "drop_is_significant": bool(abs(own_acc - swapped_acc) > ci),
+        "combined_ci95": ci,
+        "per_task_own": accuracy_by_task(own, y_true, examples, held_out_tasks),
+        "per_task_swapped": accuracy_by_task(other, y_true, examples, held_out_tasks),
+        "reading": ablation.read_swap(own_acc, swapped_acc, ci),
+    }
