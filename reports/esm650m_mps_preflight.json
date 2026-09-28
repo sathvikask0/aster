@@ -1,0 +1,83 @@
+{
+  "model": "facebook/esm2_t33_650M_UR50D",
+  "device": "mps",
+  "torch": "2.14.0",
+  "dtype": "torch.float32",
+  "sequence_tokens": 64,
+  "encoder": {
+    "trainable_params": 39357440,
+    "total_params": 651040661,
+    "trainable_fraction": 0.06045,
+    "trainable_modules": [
+      "encoder.emb_layer_norm_after.bias",
+      "encoder.emb_layer_norm_after.weight",
+      "encoder.layer.31",
+      "encoder.layer.32"
+    ]
+  },
+  "frozen_probe_unchanged": true,
+  "trainable_probe_mean_absolute_change": 9.422849689144641e-05,
+  "synthetic_labels": true,
+  "biological_performance": false,
+  "measurements": [
+    {
+      "batch_size": 4,
+      "step": 0,
+      "seconds": 1.1883109170012176,
+      "loss": 0.6819944381713867,
+      "mps_tensor_GB": 2.922516224,
+      "mps_driver_GB": 3.341615104
+    },
+    {
+      "batch_size": 4,
+      "step": 1,
+      "seconds": 0.20334970799740404,
+      "loss": 0.6750768423080444,
+      "mps_tensor_GB": 2.922516224,
+      "mps_driver_GB": 3.341615104
+    },
+    {
+      "batch_size": 8,
+      "step": 0,
+      "seconds": 0.34290120800142176,
+      "loss": 0.6863837242126465,
+      "mps_tensor_GB": 2.92252032,
+      "mps_driver_GB": 4.41966592
+    },
+    {
+      "batch_size": 8,
+      "step": 1,
+      "seconds": 0.31384316700859927,
+      "loss": 0.6822754144668579,
+      "mps_tensor_GB": 2.92252032,
+      "mps_driver_GB": 4.41966592
+    },
+    {
+      "batch_size": 16,
+      "step": 0,
+      "seconds": 0.572314125005505,
+      "loss": 0.6896374225616455,
+      "mps_tensor_GB": 2.922528512,
+      "mps_driver_GB": 4.426072064
+    },
+    {
+      "batch_size": 16,
+      "step": 1,
+      "seconds": 0.5551295000041137,
+      "loss": 0.6874768733978271,
+      "mps_tensor_GB": 2.922528512,
+      "mps_driver_GB": 4.426072064
+    }
+  ],
+  "prefix_cache_check": {
+    "max_absolute_output_error": 0.0,
+    "batch_size": 16,
+    "seconds_per_step": [
+      0.16931620800460223,
+      0.10745662498811726,
+      0.09854787499352824
+    ],
+    "cache_dtype": "torch.float32",
+    "mps_driver_GB": 4.455202816
+  }
+}

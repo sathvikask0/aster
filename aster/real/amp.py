@@ -21,8 +21,19 @@ pairs anyone bothered to assay. Three policies are offered:
            amino-acid composition and length to reduce that shortcut. Measure
            the remaining composition baseline on every constructed split.
 
+  scrambled  a *positive control*, not a biology claim. Each negative is an
+           order-shuffled copy of a positive: identical amino-acid composition
+           and length, destroyed motif and helicity. Composition and majority
+           ceilings are therefore 0.5 by construction, so any lift is
+           sequence-order signal. Use it to establish that the encoder path can
+           learn at all before reading a presumed-negative number. It does NOT
+           test pathogen specificity -- the correct answer does not depend on
+           the pathogen, so `entity_only` matching `dual` is expected here and
+           is not evidence about the prompts.
+
 None of these policies manufactures a measured negative. `covered` narrows the coverage
-confound; it does not remove it.
+confound; it does not remove it. `scrambled` sidesteps it by not using presumed
+negatives at all, at the cost of answering a different, easier question.
 
 Labels are option indices: 0 selects the presumed-inactive answer and 1 the
 reported-active answer. Version 1 put the answer texts in the opposite order,
@@ -122,6 +133,36 @@ def _feature_matrix(seqs: list[str]) -> np.ndarray:
     return mat
 
 
+def scrambled_negatives(
+    pos_seqs: list[str],
+    rng,
+    active_map: dict[str, set] | None = None,
+    max_tries: int = 20,
+) -> list[str]:
+    """Order-shuffled copies of the positives: identical composition, broken motifs.
+
+    A shuffle that reproduces the original string, collides with another decoy,
+    or lands on any real peptide in the library is rejected and retried, so a
+    decoy is never silently a true positive. A positive whose shuffles all fail
+    (homopolymers, very short sequences) contributes no negative, exactly as an
+    unmatched positive does under `matched`; `balance_tasks` then trims the
+    surplus positive.
+    """
+    known = set(active_map or ())
+    used: set[str] = set()
+    chosen: list[str] = []
+    for seq in pos_seqs:
+        chars = list(seq)
+        for _ in range(max_tries):
+            rng.shuffle(chars)
+            cand = "".join(chars)
+            if cand != seq and cand not in known and cand not in used:
+                used.add(cand)
+                chosen.append(cand)
+                break
+    return chosen
+
+
 def match_negatives(
     pos_seqs: list[str],
     candidates: list[str],
@@ -215,7 +256,7 @@ def load_amp_benchmark(
     task_metadata = {}
     examples = []
 
-    if negative_policy not in ("random", "covered", "matched"):
+    if negative_policy not in ("random", "covered", "matched", "scrambled"):
         raise ValueError(f"Unknown negative_policy: {negative_policy!r}")
 
     # Map each peptide to its active pathogens
@@ -224,7 +265,7 @@ def load_amp_benchmark(
     # Under "covered", only well-assayed peptides are eligible as presumed
     # negatives, so that a missing record is less likely to mean "never tested".
     negative_pool = all_peptides
-    if negative_policy in ("covered", "matched"):
+    if negative_policy in ("covered", "matched"):  # scrambled builds its own
         negative_pool = [
             seq for seq in all_peptides if len(active_map.get(seq, ())) >= min_coverage
         ]
@@ -249,7 +290,8 @@ def load_amp_benchmark(
             "options": options,
             "is_held_out": task in test_tasks,
             "negative_policy": negative_policy,
-            "negatives_are_presumed": True,
+            "negatives_are_presumed": negative_policy != "scrambled",
+            "negatives_are_synthetic_decoys": negative_policy == "scrambled",
         }
 
         # Positive examples for this task
@@ -257,12 +299,19 @@ def load_amp_benchmark(
 
         # Balanced presumed-negative sampling: peptides with no record for this
         # pathogen. These are unlabelled, not measured-inactive (see module docstring).
-        neg_candidates = [seq for seq in negative_pool if task not in active_map.get(seq, set())]
-        if negative_policy == "matched":
-            neg_seqs = match_negatives(pos_seqs, neg_candidates, caliper=match_caliper)
+        # `scrambled` is the exception: it synthesises composition-identical decoys
+        # instead, so no decoy can also be a positive for another task.
+        if negative_policy == "scrambled":
+            neg_seqs = scrambled_negatives(pos_seqs, rng, active_map)
         else:
-            rng.shuffle(neg_candidates)
-            neg_seqs = neg_candidates[:len(pos_seqs)]
+            neg_candidates = [seq for seq in negative_pool
+                              if task not in active_map.get(seq, set())]
+            if negative_policy == "matched":
+                neg_seqs = match_negatives(pos_seqs, neg_candidates,
+                                           caliper=match_caliper)
+            else:
+                rng.shuffle(neg_candidates)
+                neg_seqs = neg_candidates[:len(pos_seqs)]
 
         # The pairing above is 1:1 only while candidates last. A pathogen assayed
         # against most of the library runs out, and under "matched" a positive with

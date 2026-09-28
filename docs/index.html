@@ -18,7 +18,7 @@
       <a href="state.html">State of the project</a>
       <a href="rig.html">Control rig</a>
       <a href="resolution.html">v0.2 benchmark</a>
-      <a href="in-progress.html">In progress</a>
+      <a href="in-progress.html">v0.3 resolved</a>
       <a href="milestone.html">Milestone 01</a>
       <span class="spacer"></span>
       <a href="https://github.com/sathvikask0/aster">GitHub</a>
@@ -67,10 +67,10 @@
         </a>
         <a class="exp-card hub-card" href="in-progress.html">
           <div class="exp-header">
-            <span class="exp-tag tag-running">Running</span>
-            <span class="exp-title">In progress: v0.3</span>
+            <span class="exp-tag tag-decisive">Resolved</span>
+            <span class="exp-title">v0.3: the fourth outcome</span>
           </div>
-          <div class="exp-body">Composition-matched negatives, so the shortcut cannot exist by construction: the fungal ceiling falls from 0.721 to 0.522. Plus a mechanism-swap ablation. Pre-registered outcomes written down, model comparison pending.</div>
+          <div class="exp-body">Matching removed the shortcut and the signal with it: 72% of sequences carry both labels, so the 0.51 ceiling is real. Pre-registered outcome four. A scrambled-decoy control then clears 0.86 over a 0.5 ceiling, so the fine-tuning path itself is sound.</div>
         </a>
         <a class="exp-card hub-card" href="rig.html">
           <div class="exp-header">
@@ -127,6 +127,16 @@
               <td>A pre-registered expectation failed at +0.204. Shortcut level is now measured per split instead of assumed.</td>
             </tr>
             <tr>
+              <td class="model-name">v0.3 matched negatives (650M, unfrozen)</td>
+              <td><span class="exp-tag tag-decisive">Unlearnable</span></td>
+              <td>0.514 against a 0.515 ceiling, validation loss pinned at ln&nbsp;2, drift 7.8e-05. 72% of sequences carry both labels and 100% of negatives are confirmed broad-spectrum AMPs, so ~0.51 is the true ceiling. Pre-registered outcome four.</td>
+            </tr>
+            <tr>
+              <td class="model-name">Scrambled-decoy positive control</td>
+              <td><span class="exp-tag tag-passed">Passed</span></td>
+              <td>Composition ceiling 0.5 by construction. Live models reach 0.854&ndash;0.860; unfreezing two blocks is worth +0.052 &plusmn; 0.003 across three seeds. The fine-tuning path works &mdash; the null was the benchmark, not the code.</td>
+            </tr>
+            <tr>
               <td class="model-name">PeptiVerse, 3 tasks (v0.1)</td>
               <td><span class="exp-tag tag-decisive">Decisive</span></td>
               <td>dual &asymp; task_id. Three questions in a 384-d space are 2 degrees of freedom; the text encoder became an expensive one-hot.</td>
@@ -164,26 +174,30 @@
     <section id="currently-running" style="border-top: 1px solid var(--surface-border); padding-top: 3.5rem;">
       <div class="badge" style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.35); color: #c4b5fd;">
         <span class="pulse-dot"></span>
-        In progress &middot; Aster v0.3
+        Resolved &middot; Aster v0.3
       </div>
-      <h2>Make the shortcut impossible, then see what's left</h2>
-      <p class="section-desc">Design frozen &middot; pre-check run &middot; model comparison to be re-run</p>
+      <h2>Make the shortcut impossible, and the signal goes with it</h2>
+      <p class="section-desc">Design frozen &middot; run executed &middot; pre-registered outcome four landed</p>
 
-      <div class="callout"><strong>Correction, 28 September 2026.</strong> The v0.3 model comparison was run, but the AMP loader had the active answer at option index 0 while the labels said 1 = active, so cross-entropy rewarded the opposite answer text. Every model that reads answers was trained against inverted options. Those runs are kept in <code>reports/</code> as history and are not results; the comparison has to be repeated under label semantics v2. The pre-registered outcomes below are still open.</div>
+      <div class="callout"><strong>Resolved, 28 September 2026.</strong> The comparison was re-run under label semantics v2 and the fourth pre-registered outcome is the one that landed: everything collapses to chance, and the dataset cannot test the premise. The earlier runs with inverted option indices remain in <code>reports/</code> as history and are not results.</div>
 
       <p>
-        Every number on this site is measured against a ceiling high enough to swallow the effect being measured: positives are real antimicrobial peptides, negatives are peptides with no record, and the two pools differ in bulk composition. So <em>&ldquo;is this peptide cationic and amphipathic?&rdquo;</em> answers most of the benchmark without reading the question &mdash; on <em>C. albicans</em>, to 0.721.
+        Every number on this site is measured against a ceiling high enough to swallow the effect being measured: positives are real antimicrobial peptides, negatives are peptides with no record, and the two pools differ in bulk composition. So <em>&ldquo;is this peptide cationic and amphipathic?&rdquo;</em> answered most of the benchmark without reading the question &mdash; on <em>C. albicans</em>, to 0.721.
       </p>
 
       <p>
-        The fix is not a better model but a benchmark where the shortcut does not exist. Each positive claims its nearest unused negative in composition-and-length space, which drives the composition ceiling to chance <strong>by construction</strong>: 0.721 &rarr; 0.522 on the fungal target, and 0.513&ndash;0.540 across all five. Whatever score survives has to come from residue order and prompt semantics. It is entirely possible that everything collapses to chance, and that would say this dataset was never able to test the premise.
+        Matching each positive to its nearest negative in composition-and-length space drove that ceiling to chance by construction, 0.721 &rarr; 0.522 on the fungal target. It also drove the <em>signal</em> to chance. ESM-2 650M with two blocks unfrozen scored <strong>0.514 against a 0.515 ceiling</strong>, with validation loss pinned at ln&nbsp;2 and encoder drift of 7.8e-05. The cause is measurable rather than mysterious: <strong>72% of sequences in the matched benchmark carry both labels</strong>, and <strong>100% of the presumed negatives are confirmed broad-spectrum antimicrobial peptides</strong>. The encoder sees one sequence with two opposite answers, and the only differing input is a prompt the swap ablation already showed to be a task identifier. Matching on composition was matching on the discriminator.
       </p>
 
       <p>
-        Three pieces of that design are now built and unrun. The <strong>mechanism-swap ablation</strong> scores every question-reading model a second time with a prompt from another mechanism family, with donors drawn from the training tasks and the reading committed in code before any numbers exist &mdash; if accuracy survives, the prompt is a task identifier spelled in English. The <strong>protein encoder can now be fine-tuned</strong> rather than read from cache, with the same trainable blocks given to <code>entity_only</code> so the control is not starved of capacity the hypothesis model gets. And <strong>seed spread is now measurable</strong>: a lift smaller than the spread across seeds is not a finding about the model.
+        A null cannot tell a bad task from bad code, and that difference decides whether more compute is worth buying &mdash; so a <strong>scrambled-decoy positive control</strong> was added: negatives become order-shuffled copies of the positives, identical in composition and length, with motif and helicity destroyed. Both ceilings are then 0.5 by construction. Live models reach <strong>0.854&ndash;0.860</strong>, and unfreezing two blocks is worth <strong>+0.052 &plusmn; 0.003</strong> across three seeds while <code>task_id</code> and <code>question_only</code> stay at chance. The fine-tuning path works. The null belonged to the benchmark.
       </p>
 
-      <p><a href="in-progress.html" style="color: #a78bfa; font-weight: 500;">The full design, the pre-check table and the pre-registered outcomes &rarr;</a></p>
+      <p>
+        What that control deliberately does not settle: with scrambled decoys the answer does not depend on the pathogen, so <code>entity_only</code> matching <code>dual</code> is the expected outcome and the mechanistic-prompt hypothesis remains untested. The blocker is now data rather than capacity. Scaling to a larger ESM on presumed negatives reproduces a null at higher cost, because the ceiling is a property of the labels &mdash; the next experiment worth running is the one that acquires negatives somebody actually measured.
+      </p>
+
+      <p><a href="in-progress.html" style="color: #a78bfa; font-weight: 500;">The full design, the resolved outcome and the scrambled-decoy control &rarr;</a></p>
     </section>
 
 <!-- Experiments of the future -->

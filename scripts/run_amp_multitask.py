@@ -89,7 +89,7 @@ def main():
     parser.add_argument(
         "--negative-policy",
         default="random",
-        choices=["random", "covered", "matched"],
+        choices=["random", "covered", "matched", "scrambled"],
         help=(
             "How presumed-negative rows are drawn. 'random' uses the "
             "published v0.2 sampling policy; 'covered' restricts them to peptides assayed "

@@ -18,7 +18,7 @@
       <a href="state.html">State of the project</a>
       <a href="rig.html">Control rig</a>
       <a href="resolution.html" class="here">v0.2 benchmark</a>
-      <a href="in-progress.html">In progress</a>
+      <a href="in-progress.html">v0.3 resolved</a>
       <a href="milestone.html">Milestone 01</a>
       <span class="spacer"></span>
       <a href="https://github.com/sathvikask0/aster">GitHub</a>
@@ -56,7 +56,7 @@
       <p><strong>Verdict: the architecture question is answered, the biology question is not.</strong> The text encoder now earns parameters relative to a lookup table, and against the only baseline that matters this benchmark remains a negative result.</p>
       <hr />
       <h2>5. Known limitations of this benchmark</h2>
-      <ul><li><strong>Every negative is presumed, not measured.</strong> The source tables are presence-only: they record that a peptide was reported active against a pathogen, never that one was tested and found inactive. A negative here means "no record", which is partly a statement about what anyone assayed. <code>load_amp_benchmark(negative_policy="covered")</code> now restricts negatives to peptides with records against ≥3 other pathogens, which narrows the coverage confound without removing it. The results above predate that option and use <code>negative_policy="random"</code>.</li><li><strong>Negatives are not composition-matched</strong>, which is why the ceiling is high in the first place. Addressed directly by the experiment in <a href="in-progress.html">In progress: v0.3</a>.</li><li><strong>One seed, one split.</strong> No seed variance is reported. Per-task intervals are normal-approximation binomial and ignore peptide-level correlation, so they are, if anything, optimistic.</li><li><strong>ESM-2 8M only.</strong> Whether a larger protein backbone clears the ceiling is untested.</li></ul>
+      <ul><li><strong>Every negative is presumed, not measured.</strong> The source tables are presence-only: they record that a peptide was reported active against a pathogen, never that one was tested and found inactive. A negative here means "no record", which is partly a statement about what anyone assayed. <code>load_amp_benchmark(negative_policy="covered")</code> now restricts negatives to peptides with records against ≥3 other pathogens, which narrows the coverage confound without removing it. The results above predate that option and use <code>negative_policy="random"</code>.</li><li><strong>Negatives are not composition-matched</strong>, which is why the ceiling is high in the first place. Addressed directly by the experiment in <a href="in-progress.html">v0.3 resolved</a> &mdash; matching drove the ceiling to chance and the signal with it, which is that page&rsquo;s result.</li><li><strong>One seed, one split.</strong> No seed variance is reported. Per-task intervals are normal-approximation binomial and ignore peptide-level correlation, so they are, if anything, optimistic.</li><li><strong>ESM-2 8M only.</strong> Whether a larger protein backbone clears the ceiling is untested.</li></ul>
     </article>
 
     <footer>

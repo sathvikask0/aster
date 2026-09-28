@@ -1,0 +1,61 @@
+{
+  "status": "pilot_running",
+  "model": "facebook/esm2_t33_650M_UR50D",
+  "hardware": {
+    "chip": "Apple M3 Pro",
+    "unified_memory_GiB": 18,
+    "device": "mps"
+  },
+  "software": {
+    "torch": "2.14.0",
+    "transformers": "4.57.6"
+  },
+  "git_base": "e1d4f7a1cae04596c63d3ec92156890c3e9f73ac",
+  "source_sha256": {
+    "scripts/run_amp_finetune.py": "ec2033b59a6fa8e4483ff5aaaf89ee996232e8a755608d0fbca6bc56cf860832",
+    "scripts/run_650m_pilot.sh": "a837a037a3b8663455e85e63dd1252900ce8cfe0733dc489b43369f68c0c16ba",
+    "aster/real/finetune.py": "b128c05e6d622959329d5d229fa333a9afdfde7772acd54255712566707a5ddb",
+    "aster/real/amp.py": "c2b6dc7dbbb9c878cd4665ebe6f9ba7a46c5a3956aafd311c0770fa8f8dbd0f5",
+    "aster/real/evaluate.py": "0ddca781fb39d521526cd6d8d5dcae287b2d62db8aff7a7ab5e8faf914ed1970",
+    "aster/real/ceilings.py": "bb65c6e18116aec668fc9dda6b1216354cb27f71a79f15c5914f05051783d86b",
+    "aster/real/models.py": "c02d773ae6b8d0b39d66f1c25b88a05dc031f6e3b51974dd9efa9f87863e3092",
+    "uv.lock": "2f93accbe8e7c1f74ffe86d37d5e990107fe74d93d0585933990c6d29db0a72b",
+    "data/amp/peptide_pathogen_triple.csv": "029d1f79e1ce4a8a47ad2ba741cdccc78078fb539d074f8a1068893e4a50dfa1",
+    "data/amp/pathogen_description.csv": "61e0d2468e0212bdccc129651959d3929295c5fbfb1b23cadfebff757e84b77f"
+  },
+  "pilot": {
+    "seed": 42,
+    "max_unique_peptides": 2000,
+    "max_epochs": 6,
+    "batch_size": 16,
+    "trainable_protein_blocks": 2,
+    "trainable_protein_parameters": 39357440,
+    "text_encoder": "sentence-transformers/all-MiniLM-L6-v2",
+    "text_trainable": false,
+    "negative_policy": "matched",
+    "training_protocol_version": 2,
+    "checkpoint_selection": "minimum validation cross-entropy; patience 2",
+    "prefix_cache": "FP32 frozen first 31 blocks; suffix recomputed on every step"
+  },
+  "interpretation": [
+    "Pilot feasibility and exploratory comparison; one seed is not a repeatable biological result.",
+    "Compare cross_attention_live to cross_attention_frozen and dual_live to dual_frozen.",
+    "Compare unfreezing gains with entity_only_live minus entity_only_frozen.",
+    "Read per-task margins over max(majority, out-of-fold composition probe), with the existing uncertainty rule.",
+    "Wrong-family prompt ablation is necessary evidence of question use, not sufficient evidence of correct biological mechanism.",
+    "Negatives are presumed inactive; held-out tasks can share peptide sequences with training."
+  ],
+  "modal_gate": {
+    "status": "not_evaluated",
+    "requirements": [
+      "Repeat any promising gain with seeds 43 and 44 under the same protocol.",
+      "A repeatable gain over frozen and shortcut controls, not just lower training loss.",
+      "For a claim about question use, improve beyond the peptide-only control and retain meaningful prompt-ablation sensitivity.",
+      "Inspect split leakage and label limitations before treating results as biological validation."
+    ],
+    "cloud_jobs_started": false
+  },
+  "report": "reports/ft_650m_p2000_e6_b16_s42_v2.json",
+  "log": "logs/ft_650m_p2000_e6_b16_s42_v2.log",
+  "checkpoint_dir": "checkpoints/ft_650m_p2000_e6_b16_s42_v2"
+}

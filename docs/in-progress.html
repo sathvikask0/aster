@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>In progress: v0.3 · Aster</title>
-  <meta name="description" content="Composition-matched negatives, so the shortcut cannot exist. Pre-registered, not yet run." />
+  <title>v0.3 resolved: the fourth outcome · Aster</title>
+  <meta name="description" content="The matched benchmark collapsed to chance, as pre-registered outcome four allowed. A scrambled-decoy control shows the fine-tuning path itself works." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
@@ -18,14 +18,18 @@
       <a href="state.html">State of the project</a>
       <a href="rig.html">Control rig</a>
       <a href="resolution.html">v0.2 benchmark</a>
-      <a href="in-progress.html" class="here">In progress</a>
+      <a href="in-progress.html" class="here">v0.3 resolved</a>
       <a href="milestone.html">Milestone 01</a>
       <span class="spacer"></span>
       <a href="https://github.com/sathvikask0/aster">GitHub</a>
     </nav>
     <article>
-      <h1>In progress: make the shortcut impossible, then see what's left</h1>
-      <p><strong>Aster v0.3 · design frozen 27 September 2026 · run pending</strong></p>
+      <h1>v0.3 resolved: the shortcut is gone, and so is the signal</h1>
+      <p><strong>Aster v0.3 · design frozen 27 September 2026 · run executed 28 September 2026</strong></p>
+      <div class="callout">
+        <p><strong>The fourth pre-registered outcome is the one that landed.</strong> &ldquo;Everything collapses to chance. The benchmark's signal <em>was</em> the shortcut. The dataset cannot test the premise and a different data source is required.&rdquo; Written before the run; recorded here unedited.</p>
+        <p>A separate positive control, added after the null, shows the fine-tuning machinery is sound. The matched benchmark is unlearnable; the code that ran on it is not broken.</p>
+      </div>
       <p>Status: the data construction and the pre-check below have run. The model comparison has been <em>executed</em> (<code>reports/amp_v03_random.json</code>, <code>amp_v03_random_balanced.json</code>, <code>amp_v03_matched_balanced.json</code>) but those runs are <strong>not results</strong>: they predate the 28 September answer-label correction, so every model that reads answer text was trained against inverted option indices. They are kept as history only. The pre-registered outcomes below are still open, and the run has to be repeated under label semantics v2.</p>
       <hr />
       <h2>The question this experiment exists to answer</h2>
@@ -56,11 +60,51 @@
       <p>Three things keep that from becoming an unreadable number. The heads are the same classes used unchanged, so <code>*_live</code> against <code>*_frozen</code> differs in exactly one factor. <code>entity_only</code> gets trainable blocks too: it is the control for &ldquo;answers without reading the question&rdquo; and it has a protein encoder, so unfreezing only the hypothesis model would hand it capacity the control was denied and call the difference transfer. And <code>encoder_drift</code> is reported beside every accuracy, because a gain with drift near zero is a head effect wearing a fine-tuning label.</p>
       <p>The text tower can now be unfrozen too, behind <code>--unfreeze-text</code>, and it is a separate flag rather than a default so the runs read as a ladder: frozen, protein-live, both-live. If both towers move at once and the number rises, nothing says which one did it, so the comparison script warns when the two kinds of run are mixed.</p>
       <p>Turning it on adds <code>question_only</code> to the live set, which is the point rather than a side effect. <code>question_only</code> is the control for &ldquo;answers from the prompt alone&rdquo;; handing the hypothesis model trainable text blocks while denying them to that control would inflate the hypothesis by exactly the capacity withheld &mdash; the same argument that gives <code>entity_only</code> a live protein encoder. If <code>question_only</code> gains as much, the text tower learned the label prior rather than the question. Drift is reported per tower, so a run where only one actually moved is visible instead of assumed.</p>
-      <p>The cost is smaller than it looks: there is one question per task and two answer strings in the entire benchmark, so a step forwards about 23 short sequences rather than one per row. With the text tower live the batch carries question and answer <em>indices</em> instead of cached vectors &mdash; a cached vector cannot carry a gradient &mdash; and the mechanism swap moves the index. <strong>Neither the protein-only nor the both-towers run has been executed.</strong></p>
+      <p>The cost is smaller than it looks: there is one question per task and two answer strings in the entire benchmark, so a step forwards about 23 short sequences rather than one per row. With the text tower live the batch carries question and answer <em>indices</em> instead of cached vectors &mdash; a cached vector cannot carry a gradient &mdash; and the mechanism swap moves the index. <strong>The protein-only run has now been executed</strong> &mdash; on matched negatives (a null, above) and on scrambled decoys (a pass, above). The both-towers run has not.</p>
       <h2>One seed is not a result</h2>
       <p>The second pre-registered outcome &mdash; &ldquo;lift is positive but inside the intervals&rdquo; &mdash; needs seed variance to resolve, and no run here has had it. <code>scripts/compare_amp_runs.py</code> reads several reports and prints the spread across seeds, whether the lift is positive in every run, and whether it exceeds that spread. A lift smaller than the seed spread is not a finding about the model. It also refuses to average incomparable runs: a report without <code>label_semantics_version</code> predates the answer-label fix, and the three stored v0.3 files are rejected by name for exactly that reason (there is a test that asserts it).</p>
+      <hr />
+      <h2>What the matched run returned</h2>
+      <p>ESM-2 650M, last two blocks unfrozen, 2,000 peptides, matched negatives. Accuracy <strong>0.514</strong> against a <strong>0.515</strong> ceiling. Validation loss sat at 0.6931 &mdash; ln&nbsp;2, the value of a constant prediction &mdash; for every epoch until early stopping, and <code>encoder_drift</code> came in at <strong>7.8e-05</strong>: 39.4M trainable parameters that effectively did not move. The mechanism swap cost 0.003, inside the intervals, so the prompt was again a task identifier spelled in English.</p>
+      <p>The 35M frozen ladder agrees. Every arm lands inside the ceiling band, and <code>entity_only_live</code> at 0.538 matches <code>dual_live</code> at 0.545 &mdash; the control that never reads the question does as well as the model that does.</p>
+      <h2>Why it is unlearnable, measured rather than argued</h2>
+      <p>The cause is in the construction. On the shipped data under <code>matched</code> with balanced tasks, seed 42:</p>
+      <div class="table-wrapper"><table><thead><tr><th>Property</th><th>Value</th></tr></thead><tbody>
+        <tr><td>Sequences carrying <strong>both</strong> label 1 and label 0</td><td><strong>8,338 of 11,545 (72%)</strong></td></tr>
+        <tr><td>Negatives with confirmed activity against &ge;3 other pathogens</td><td><strong>100%</strong></td></tr>
+        <tr><td>Mean confirmed pathogen activities, negatives</td><td>5.3</td></tr>
+        <tr><td>Mean confirmed pathogen activities, positives</td><td>7.3</td></tr>
+      </tbody></table></div>
+      <p><code>covered</code> and <code>matched</code> require <code>min_coverage</code> records, so every presumed negative is a <em>confirmed broad-spectrum antimicrobial peptide</em>. Composition matching then strips length and residue frequency. What remains is the same sequence presented with opposite labels, distinguished only by a prompt the swap ablation has already shown to be a bare task id. The ceiling near 0.51 is not a weak result to be improved on; it is the real ceiling.</p>
+      <p>This is the honest reading of the design, and it is worth stating plainly: <strong>the two policies built to remove a confound removed the signal with it.</strong> Matching on composition is matching on the discriminator, because in this data the classes differ in little else.</p>
+      <h2>The control that separates a bad task from bad code</h2>
+      <p>A null cannot distinguish &ldquo;the task cannot be learned&rdquo; from &ldquo;the code cannot learn&rdquo;, and that distinction decides whether more compute is worth buying. <code>--negative-policy scrambled</code> supplies the missing rung: negatives are order-shuffled copies of the positives &mdash; identical composition, identical length, destroyed motif and helicity. A shuffle that reproduces its source, collides with another decoy, or matches any real peptide in the library is rejected, so a decoy is never silently a true positive. Both ceilings are 0.5 by construction and any lift is residue <em>order</em>, which is what ESM-2 is supposed to supply.</p>
+      <p>ESM-2 8M, 2,000 peptides, two trainable blocks. Ceilings 0.526&ndash;0.545, with <code>composition_oof</code> at 0.43&ndash;0.52 &mdash; at or below chance, as the design requires:</p>
+      <div class="table-wrapper"><table><thead><tr><th>Model</th><th>Accuracy</th></tr></thead><tbody>
+        <tr><td><code>entity_only_live</code></td><td><strong>0.860</strong></td></tr>
+        <tr><td><code>dual_live</code></td><td><strong>0.858</strong></td></tr>
+        <tr><td><code>cross_attention_live</code></td><td>0.854</td></tr>
+        <tr><td><code>entity_only_frozen</code></td><td>0.814</td></tr>
+        <tr><td><code>dual_frozen</code></td><td>0.811</td></tr>
+        <tr><td><code>cross_attention_frozen</code></td><td>0.684</td></tr>
+        <tr><td><code>task_id_frozen</code></td><td>0.487</td></tr>
+        <tr><td><code>question_only_frozen</code></td><td>0.513</td></tr>
+      </tbody></table></div>
+      <p>The gain from unfreezing survives the seed test at 35M, which is the check the second pre-registered outcome asked for:</p>
+      <div class="table-wrapper"><table><thead><tr><th>live &minus; frozen</th><th>s42</th><th>s43</th><th>s44</th><th>mean &plusmn; sd</th></tr></thead><tbody>
+        <tr><td><code>dual</code></td><td>+0.055</td><td>+0.053</td><td>+0.050</td><td><strong>+0.052 &plusmn; 0.003</strong></td></tr>
+        <tr><td><code>entity_only</code></td><td>+0.023</td><td>+0.059</td><td>+0.052</td><td>+0.044 &plusmn; 0.019</td></tr>
+        <tr><td><code>cross_attention</code></td><td>+0.074</td><td>+0.036</td><td>+0.037</td><td>+0.049 &plusmn; 0.022</td></tr>
+      </tbody></table></div>
+      <p><code>task_id_frozen</code> at 0.486 &plusmn; 0.007 and <code>question_only_frozen</code> at 0.514 &plusmn; 0.007 stay at chance in every seed, and <code>encoder_drift</code> holds at 4.2&ndash;4.4e-04 against 7.8e-05 on the matched null &mdash; there was a gradient to follow here and there was not one there. The fine-tuning path works, and two trainable blocks are worth about five points.</p>
+      <h2>What this control does not show</h2>
+      <p>Three limits, stated because the 0.86 is easy to misread.</p>
+      <p><strong>It says nothing about the prompts.</strong> With scrambled decoys the correct answer does not depend on the pathogen, so <code>entity_only</code> &asymp; <code>dual</code> is the <em>expected</em> outcome, not a finding. The mechanistic-prompt hypothesis is untested by this run.</p>
+      <p><strong>Quote the gap, not the accuracy.</strong> The live&minus;frozen comparison is within-seed and stable. Raw accuracies are not comparable across seeds: seed 44 draws a different held-out mix and its ceiling rises to 0.621.</p>
+      <p><strong>Real AMPs against their own shuffles is an easier question than real biology.</strong> It establishes that the encoder path learns residue order. It does not establish that it learns antimicrobial activity as a clinician would define it.</p>
       <h2>What would still be wrong afterwards</h2>
       <p>Matching removes a confound; it does not create measured negatives. Every label in this benchmark is still presence-or-absence in a literature table. A clean answer needs assay data with recorded inactives — an MIC table with upper bounds, not a list of hits.</p>
+      <p>That sentence was written before the run and it is now the whole critical path. The fourth outcome landing means the blocker is data, not model capacity: scaling to a larger ESM on the matched benchmark reproduces a null at higher cost, because the ceiling is a property of the labels. The next experiment worth running is the one that acquires negatives somebody actually measured.</p>
     </article>
 
     <footer>

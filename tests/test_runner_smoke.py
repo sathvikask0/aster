@@ -152,7 +152,8 @@ def _stubs(monkeypatch, runner):
     monkeypatch.setattr(runner, "load_text_encoder", stub_text)
 
 
-def test_finetune_runner_runs_with_a_stub_encoder(monkeypatch, amp_data, tmp_path):
+@pytest.mark.parametrize("cached", [False, True])
+def test_finetune_runner_runs_with_a_stub_encoder(monkeypatch, amp_data, tmp_path, cached):
     """The live path, minus the download: a tiny random ESM of the same class."""
     import torch
     from transformers import EsmConfig, EsmModel
@@ -164,11 +165,13 @@ def test_finetune_runner_runs_with_a_stub_encoder(monkeypatch, amp_data, tmp_pat
     _stubs(monkeypatch, runner)
 
     out = tmp_path / "finetune.json"
-    monkeypatch.setattr(sys, "argv", [
+    argv = [
         "run_amp_finetune.py", "--epochs", "1", "--batch-size", "16",
         "--trainable-blocks", "1", "--max-len", "32", "--device", "cpu",
-        "--skip-frozen-reference", "--out", str(out),
-    ])
+        "--out", str(out),
+    ]
+    argv += ["--cache-frozen-prefix"] if cached else ["--skip-frozen-reference"]
+    monkeypatch.setattr(sys, "argv", argv)
     runner.main()
 
     report = json.loads(out.read_text())
@@ -176,7 +179,12 @@ def test_finetune_runner_runs_with_a_stub_encoder(monkeypatch, amp_data, tmp_pat
     assert cfg["label_semantics_version"] == 2
     assert cfg["negative_policy"] == "matched" and cfg["balance_tasks"] is True
     assert cfg["text_encoder_trainable"] is False
-    assert cfg["frozen_reference_included"] is False
+    assert cfg["frozen_reference_included"] is cached
+    assert cfg["training_protocol_version"] == 2
+    if cached:
+        assert cfg["frozen_reference_epochs"] == cfg["epochs"] == 1
+        assert cfg["frozen_reference_batch_size"] == cfg["batch_size"] == 16
+        assert "dual_frozen" in report["results"]
     assert cfg["encoder_trainable"]["trainable_params"] > 0
 
     for name in ("cross_attention_live", "dual_live", "entity_only_live"):

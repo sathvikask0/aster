@@ -218,6 +218,75 @@ def test_runner_train_loop_fits_a_tiny_problem():
     assert loss_after < loss_before
 
 
+def test_cached_frozen_prefix_preserves_outputs_and_suffix_gradients():
+    """Caching must not change the learned computation, including rotary ESM."""
+    import copy
+    from aster.model import unfreeze_suffix
+    from aster.real.finetune import cache_frozen_prefix
+
+    torch.manual_seed(123)
+    cfg = EsmConfig(
+        vocab_size=33, hidden_size=32, num_hidden_layers=4,
+        num_attention_heads=2, intermediate_size=64,
+        max_position_embeddings=64, pad_token_id=1, mask_token_id=32,
+        token_dropout=True, position_embedding_type="rotary",
+        hidden_dropout_prob=0.1, attention_probs_dropout_prob=0.1,
+    )
+    enc = EsmModel(cfg, add_pooling_layer=False)
+    unfreeze_suffix(enc, 2)
+    original = LiveAster(RealAster(32, D_TEXT, N_TASKS, h=32, p=0), enc)
+    cached = copy.deepcopy(original)
+    b = batch(b=5)
+    b["input_ids"][b["attention_mask"] == 0] = 1
+    states = cache_frozen_prefix(cached.encoder, b["input_ids"],
+                                 b["attention_mask"], 2, batch_size=2)
+    assert states.device.type == "cpu" and not states.requires_grad
+    cached.prefix_states, cached.trainable_blocks = states, 2
+    # Repeated, reordered sequences must gather the correct cache rows.
+    idx = torch.tensor([3, 0, 3, 4])
+    selected = {k: v[idx] for k, v in b.items()}
+    cached_batch = {**selected, "prefix_idx": idx}
+    original.train()
+    cached.train()
+    direct = original(selected)
+    indirect = cached(cached_batch)
+    torch.testing.assert_close(direct, indirect, atol=1e-6, rtol=1e-5)
+    for model, logits in ((original, direct), (cached, indirect)):
+        torch.nn.functional.cross_entropy(logits, selected["y"]).backward()
+    for (name, p), (_, q) in zip(original.named_parameters(), cached.named_parameters()):
+        if p.requires_grad:
+            assert p.grad is not None, name
+            torch.testing.assert_close(p.grad, q.grad, atol=1e-6, rtol=1e-4)
+        else:
+            assert p.grad is None and q.grad is None
+
+
+def test_prefix_cache_rejects_trainable_prefix():
+    from aster.real.finetune import cache_frozen_prefix
+
+    enc = encoder(trainable_blocks=3)
+    b = batch()
+    with pytest.raises(ValueError, match="trainable parameters"):
+        cache_frozen_prefix(enc, b["input_ids"], b["attention_mask"], 2)
+
+
+def test_small_checkpoint_restores_trainable_weights_and_preserves_frozen_weights():
+    from aster.real.finetune import snapshot_trainable_state
+
+    model = live()
+    saved = snapshot_trainable_state(model)
+    full = {n: p.detach().clone() for n, p in model.named_parameters()}
+    frozen_names = {n for n, p in model.named_parameters() if not p.requires_grad}
+    assert not frozen_names.intersection(saved)
+    with torch.no_grad():
+        for p in model.parameters():
+            if p.requires_grad:
+                p.add_(1)
+    model.load_state_dict(saved, strict=False)
+    for n, p in model.named_parameters():
+        torch.testing.assert_close(p, full[n], rtol=0, atol=0)
+
+
 # --- the text tower, when it is also live ----------------------------------
 
 def text_encoder(trainable_blocks=1):

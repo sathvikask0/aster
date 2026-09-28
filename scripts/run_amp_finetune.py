@@ -24,6 +24,7 @@ entity path worth unfreezing, so it is a reference row, not a matched control.
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import sys
 import time
@@ -44,7 +45,7 @@ from aster.real.evaluate import (
 from aster.real.finetune import (
     LIVE_TEXT_MODES, LiveAster, TextTable, encoder_drift, load_protein_encoder,
     load_text_encoder, param_groups, snapshot_encoder, tokenize_sequences,
-    trainable_report,
+    trainable_report, cache_frozen_prefix, pooled_suffix, snapshot_trainable_state,
 )
 from aster.real.models import CrossAttentionAster, RealAster
 
@@ -95,10 +96,11 @@ def train(model, tr, va, device, epochs, bs, head_lr, encoder_lr, text_lr=None,
     )
 
     best_loss, best_weights, stale = float("inf"), None, 0
+    history = []
     for epoch in range(epochs):
         model.train()
         t0, seen, running = time.time(), 0, 0.0
-        for idx in batches(n, bs, shuffle=True, generator=gen):
+        for step, idx in enumerate(batches(n, bs, shuffle=True, generator=gen), 1):
             batch = slice_batch(tr, idx, device)
             loss = F.cross_entropy(model(batch), batch["y"])
             loss.backward()
@@ -110,6 +112,9 @@ def train(model, tr, va, device, epochs, bs, head_lr, encoder_lr, text_lr=None,
             sched.step()
             running += loss.item() * idx.numel()
             seen += idx.numel()
+            if step % 100 == 0:
+                print(f"    {label} epoch {epoch + 1}: {seen}/{n} rows "
+                      f"| loss {running / seen:.4f} | {time.time() - t0:.0f}s", flush=True)
 
         va_logits = forward_all(model, va, bs, device)
         val_loss = F.cross_entropy(
@@ -117,10 +122,12 @@ def train(model, tr, va, device, epochs, bs, head_lr, encoder_lr, text_lr=None,
         ).item()
         print(f"    epoch {epoch + 1}/{epochs}  train {running / max(seen, 1):.4f} "
               f"| val {val_loss:.4f} | {time.time() - t0:.0f}s", flush=True)
+        history.append({"epoch": epoch + 1, "train_loss": running / max(seen, 1),
+                        "val_loss": val_loss, "seconds": time.time() - t0})
 
         if val_loss < best_loss - 1e-4:
             best_loss, stale = val_loss, 0
-            best_weights = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            best_weights = snapshot_trainable_state(model)
         else:
             stale += 1
             if stale >= patience:
@@ -128,8 +135,9 @@ def train(model, tr, va, device, epochs, bs, head_lr, encoder_lr, text_lr=None,
                 break
 
     if best_weights is not None:
-        model.load_state_dict({k: v.to(device) for k, v in best_weights.items()})
+        model.load_state_dict(best_weights, strict=False)
     model.eval()
+    model.training_history = history
     return model
 
 
@@ -155,8 +163,10 @@ def main():
                    help="Defaults to --encoder-lr")
     p.add_argument("--max-len", type=int, default=64)
     p.add_argument("--max-peptides", type=int, default=None)
+    p.add_argument("--cache-frozen-prefix", action="store_true",
+                   help="Cache frozen block outputs on CPU; recompute and train the suffix")
     p.add_argument("--negative-policy", default="matched",
-                   choices=["random", "covered", "matched"])
+                   choices=["random", "covered", "matched", "scrambled"])
     p.add_argument("--no-balance-tasks", action="store_true",
                    help="Leave the training label prior skewed (not recommended)")
     p.add_argument("--skip-frozen-reference", action="store_true",
@@ -164,12 +174,20 @@ def main():
                         "cache and they are the only thing that makes the fine-tuned "
                         "number attributable, so skipping is rarely worth it.")
     p.add_argument("--device", default="auto")
+    p.add_argument("--mps-memory-fraction", type=float, default=0.75,
+                   help="Fraction of recommended MPS working set allowed for allocations")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out", default="reports/amp_finetune_results.json")
+    p.add_argument("--checkpoint-dir", default=None,
+                   help="Save best trainable weights and base-model provenance for each live model")
     args = p.parse_args()
     text_model = TEXT_MODELS.get(args.text_model, args.text_model)
 
     device = pick_device(args.device)
+    if device == "mps":
+        if not 0 < args.mps_memory_fraction <= 1:
+            p.error("--mps-memory-fraction must be in (0, 1]")
+        torch.mps.set_per_process_memory_fraction(args.mps_memory_fraction)
     balance = not args.no_balance_tasks
     text_note = (f"text: last {args.text_trainable_blocks} blocks trainable"
                  if args.unfreeze_text else "text: frozen")
@@ -249,6 +267,7 @@ def main():
         args.esm, trainable_blocks=args.trainable_blocks, device=device
     )
     report = trainable_report(encoder)
+    protein_revision = getattr(encoder.config, "_commit_hash", None)
     print(f"\nEncoder: {report['trainable_params']:,} of {report['total_params']:,} "
           f"params trainable ({report['trainable_fraction']:.1%})")
 
@@ -268,6 +287,29 @@ def main():
                                   tokens=tokens_for(test_ex)),
     }
     d_entity = encoder.config.hidden_size
+    prefix_states, frozen_mat = None, None
+    if args.cache_frozen_prefix:
+        print("\nCaching only the frozen prefix (full precision, CPU)", flush=True)
+        prefix_states = cache_frozen_prefix(
+            encoder, ids, mask, args.trainable_blocks, args.batch_size)
+        for split, rows in (("train", train_ex), ("val", val_ex), ("test", test_ex)):
+            live_tensors[split]["prefix_idx"] = torch.tensor(
+                [row_of[e.sequence] for e in rows], dtype=torch.long)
+        if not args.skip_frozen_reference:
+            encoder.eval()
+            parts = []
+            with torch.no_grad():
+                for idx in batches(len(unique_seqs), args.batch_size):
+                    parts.append(pooled_suffix(
+                        encoder, prefix_states[idx].to(device), mask[idx].to(device),
+                        args.trainable_blocks).float().cpu())
+            frozen_mat = torch.cat(parts).numpy()
+        print(f"  prefix cache: {prefix_states.numel() * prefix_states.element_size() / 1e9:.2f} GB", flush=True)
+    # This encoder was only needed for shapes, tokenization and frozen caches.
+    del encoder
+    gc.collect()
+    if device == "mps":
+        torch.mps.empty_cache()
 
     # A live text tower needs indices rather than vectors: cached embeddings
     # cannot carry a gradient. There is one question per task and two answer
@@ -275,7 +317,7 @@ def main():
     question_order = sorted(meta)
     text_tables, text_report = None, None
     if args.unfreeze_text:
-        _, text_tok = load_text_encoder(text_model, args.text_trainable_blocks, device)
+        text_probe, text_tok = load_text_encoder(text_model, args.text_trainable_blocks, device)
         q_ids, q_mask = tokenize_sequences(
             [questions[t] for t in question_order], text_tok, max_len=64)
         answer_order = sorted({o for t in meta for o in meta[t]["options"][:2]})
@@ -294,12 +336,11 @@ def main():
             live_tensors[split]["a_idx"] = torch.tensor(
                 [[a_pos[meta[r.task]["options"][k]] for k in (0, 1)] for r in rows],
                 dtype=torch.long, device=device)
-        probe, _ = load_text_encoder(text_model, args.text_trainable_blocks, device)
-        text_report = trainable_report(probe)
+        text_report = trainable_report(text_probe)
         print(f"Text encoder: {text_report['trainable_params']:,} of "
               f"{text_report['total_params']:,} params trainable "
               f"({text_report['trainable_fraction']:.1%})")
-        del probe
+        del text_probe
 
     live_models = [
         ("cross_attention_live", CrossAttentionAster, "dual"),
@@ -325,6 +366,7 @@ def main():
             head, enc, text_encoder=text_enc,
             questions=text_tables["questions"] if text_enc is not None else None,
             answers=text_tables["answers"] if text_enc is not None else None,
+            prefix_states=prefix_states, trainable_blocks=args.trainable_blocks,
         ).to(device)
         before = snapshot_encoder(model)
         text_before = snapshot_encoder(model, "text_encoder")
@@ -340,6 +382,15 @@ def main():
             y_test, y_val, test_ex, held_out_tasks, ceilings,
         )
         res["encoder_drift"] = drift
+        res["training_history"] = model.training_history
+        if args.checkpoint_dir:
+            checkpoint = Path(args.checkpoint_dir) / f"{name}.pt"
+            checkpoint.parent.mkdir(parents=True, exist_ok=True)
+            torch.save({"state_dict": snapshot_trainable_state(model),
+                        "base_encoder": model.encoder.config._name_or_path,
+                        "base_revision": getattr(model.encoder.config, "_commit_hash", None),
+                        "model": name, "mode": mode, "config": vars(args)}, checkpoint)
+            res["checkpoint"] = str(checkpoint)
         res["text_encoder_drift"] = text_drift
         res["encoder"] = {
             "live": True,
@@ -375,15 +426,17 @@ def main():
             print("    WARN encoder did not move. This is not a fine-tuning result.")
         if model.text_is_live and text_drift < 1e-8:
             print("    WARN text encoder did not move despite --unfreeze-text.")
-        del model, enc
+        del model, enc, before, text_before, text_enc, head
+        gc.collect()
         if device == "mps":
             torch.mps.empty_cache()
 
     # ---------- Frozen reference: cached vectors, identical heads ----------
     if not args.skip_frozen_reference:
         print("\n--- Frozen reference (cached embeddings, same heads) ---")
-        esm_mat = embed_sequences(unique_seqs, model=args.esm, device=device,
-                                  max_len=args.max_len)
+        esm_mat = frozen_mat if frozen_mat is not None else embed_sequences(
+            unique_seqs, model=args.esm, device=device,
+            max_len=args.max_len, batch_size=args.batch_size)
         emb = {s: esm_mat[i] for i, s in enumerate(unique_seqs)}
         frozen_tensors = {
             split: build_tensor_dict(
@@ -404,7 +457,7 @@ def main():
             torch.manual_seed(args.seed)
             head = cls(esm_mat.shape[1], d_text, len(train_tasks), mode=mode).to(device)
             head = train(head, frozen_tensors["train"], frozen_tensors["val"], device,
-                         epochs=max(args.epochs, 20), bs=256, head_lr=args.head_lr,
+                         epochs=args.epochs, bs=args.batch_size, head_lr=args.head_lr,
                          encoder_lr=args.encoder_lr, seed=args.seed, label=name)
             res = evaluate(
                 forward_all(head, frozen_tensors["test"], 4096, device),
@@ -421,6 +474,7 @@ def main():
                     lambda m, t: forward_all(m, t, 4096, device), ablation,
                 )
             results[name] = res
+            res["training_history"] = head.training_history
             print_result(name, res, held_out_tasks)
             if "mechanism_swap" in res:
                 ms = res["mechanism_swap"]
@@ -442,6 +496,9 @@ def main():
             "config": {
                 "command": " ".join(sys.argv),
                 "esm": args.esm,
+                "protein_revision": protein_revision,
+                "device": device,
+                "torch_version": torch.__version__,
                 "trainable_blocks": args.trainable_blocks,
                 "encoder_trainable": report,
                 "epochs": args.epochs,
@@ -450,6 +507,11 @@ def main():
                 "encoder_lr": args.encoder_lr,
                 "max_len": args.max_len,
                 "max_peptides": args.max_peptides,
+                "training_protocol_version": 2,
+                "frozen_reference_epochs": args.epochs,
+                "frozen_reference_batch_size": args.batch_size,
+                "cache_frozen_prefix": args.cache_frozen_prefix,
+                "prefix_cache_dtype": str(prefix_states.dtype) if prefix_states is not None else None,
                 "min_samples": MIN_SAMPLES,
                 "seed": args.seed,
                 "negative_policy": args.negative_policy,
@@ -467,6 +529,8 @@ def main():
                 "n_train": len(train_ex),
                 "n_val": len(val_ex),
                 "n_test": len(test_ex),
+                "train_test_shared_sequences": len(
+                    {e.sequence for e in train_ex} & {e.sequence for e in test_ex}),
             },
             "reporting_rule": REPORTING_RULE,
             "reading_notes": [
@@ -476,6 +540,8 @@ def main():
                 "question_only are frozen reference rows, not matched controls.",
                 "encoder_drift ~0 alongside a gain means the encoder did not move "
                 "and the effect is in the head.",
+                "Tasks are held out; peptide sequences can occur across splits. "
+                "This run does not establish generalization to unseen peptide families.",
             ],
             "held_out_tasks": held_out_tasks,
             "ceilings": ceilings,

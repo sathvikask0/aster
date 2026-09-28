@@ -1,0 +1,1280 @@
+{
+  "config": {
+    "command": "scripts/run_amp_finetune.py --esm 8M --trainable-blocks 2 --negative-policy scrambled --max-peptides 2000 --epochs 6 --batch-size 32 --device mps --out reports/scrambled_8m_s42.json",
+    "esm": "8M",
+    "protein_revision": "c731040fcd8d73dceaa04b0a8e6329b345b0f5df",
+    "device": "mps",
+    "torch_version": "2.14.0",
+    "trainable_blocks": 2,
+    "encoder_trainable": {
+      "trainable_params": 2466560,
+      "total_params": 7511801,
+      "trainable_fraction": 0.32836,
+      "trainable_modules": [
+        "encoder.emb_layer_norm_after.bias",
+        "encoder.emb_layer_norm_after.weight",
+        "encoder.layer.4",
+        "encoder.layer.5"
+      ]
+    },
+    "epochs": 6,
+    "batch_size": 32,
+    "head_lr": 0.001,
+    "encoder_lr": 2e-05,
+    "max_len": 64,
+    "max_peptides": 2000,
+    "training_protocol_version": 2,
+    "frozen_reference_epochs": 6,
+    "frozen_reference_batch_size": 32,
+    "cache_frozen_prefix": false,
+    "prefix_cache_dtype": null,
+    "min_samples": 400,
+    "seed": 42,
+    "negative_policy": "scrambled",
+    "balance_tasks": true,
+    "text_encoder": "sentence-transformers/all-MiniLM-L6-v2",
+    "text_encoder_dim": 384,
+    "text_encoder_trainable": false,
+    "text_trainable_blocks": 0,
+    "text_lr": null,
+    "text_encoder_trainable_report": null,
+    "live_text_modes": [],
+    "label_semantics_version": 2,
+    "frozen_reference_included": true,
+    "n_train": 2367,
+    "n_val": 438,
+    "n_test": 528,
+    "train_test_shared_sequences": 181
+  },
+  "reporting_rule": "Every claim is a margin over 'ceiling' (max of majority and the out-of-fold composition probe), never over task_id. A lift smaller than the combined 95% intervals is not a result.",
+  "reading_notes": [
+    "entity_only_live has a live encoder too; if it moves like the hypothesis model, the gain is peptide classification, not typed decisions.",
+    "Only *_live vs *_frozen isolates unfreezing. task_id and question_only are frozen reference rows, not matched controls.",
+    "encoder_drift ~0 alongside a gain means the encoder did not move and the effect is in the head.",
+    "Tasks are held out; peptide sequences can occur across splits. This run does not establish generalization to unseen peptide families."
+  ],
+  "held_out_tasks": [
+    "B.cereus",
+    "C.albicans",
+    "K.pneumoniae",
+    "S.epidermidis",
+    "S.typhimurium"
+  ],
+  "ceilings": {
+    "B.cereus": {
+      "n": 61,
+      "majority": 0.540983606557377,
+      "composition_oof": 0.4262295081967213,
+      "composition_insample": 0.819672131147541,
+      "ceiling": 0.540983606557377,
+      "ceiling_ci95": 0.12505391843584007,
+      "estimator": "logreg(standardized 20-dim AA freq), 5-fold out-of-fold"
+    },
+    "C.albicans": {
+      "n": 55,
+      "majority": 0.5454545454545454,
+      "composition_oof": 0.4909090909090909,
+      "composition_insample": 0.8181818181818182,
+      "ceiling": 0.5454545454545454,
+      "ceiling_ci95": 0.13159599399245026,
+      "estimator": "logreg(standardized 20-dim AA freq), 5-fold out-of-fold"
+    },
+    "K.pneumoniae": {
+      "n": 145,
+      "majority": 0.5448275862068965,
+      "composition_oof": 0.5241379310344828,
+      "composition_insample": 0.6137931034482759,
+      "ceiling": 0.5448275862068965,
+      "ceiling_ci95": 0.08105682369697237,
+      "estimator": "logreg(standardized 20-dim AA freq), 5-fold out-of-fold"
+    },
+    "S.epidermidis": {
+      "n": 156,
+      "majority": 0.5256410256410257,
+      "composition_oof": 0.47435897435897434,
+      "composition_insample": 0.6346153846153846,
+      "ceiling": 0.5256410256410257,
+      "ceiling_ci95": 0.07835955479956168,
+      "estimator": "logreg(standardized 20-dim AA freq), 5-fold out-of-fold"
+    },
+    "S.typhimurium": {
+      "n": 111,
+      "majority": 0.5315315315315315,
+      "composition_oof": 0.4774774774774775,
+      "composition_insample": 0.6846846846846847,
+      "ceiling": 0.5315315315315315,
+      "ceiling_ci95": 0.09283233638299092,
+      "estimator": "logreg(standardized 20-dim AA freq), 5-fold out-of-fold"
+    }
+  },
+  "mechanism_swap_map": {
+    "B.cereus": "A.baumannii",
+    "C.albicans": "S.aureus",
+    "K.pneumoniae": "L.monocytogenes",
+    "S.epidermidis": "E.coli",
+    "S.typhimurium": "E.faecium"
+  },
+  "prompt_families": {
+    "E.coli": "gram_negative",
+    "S.aureus": "gram_positive",
+    "P.aeruginosa": "gram_negative",
+    "B.acillus": "gram_positive",
+    "B.subtilis": "gram_positive",
+    "K.pneumoniae": "gram_negative",
+    "S.epidermidis": "gram_positive",
+    "E.faecium": "gram_positive",
+    "E.faecalis": "gram_positive",
+    "A.baumannii": "gram_negative",
+    "S.typhimurium": "gram_negative",
+    "C.albicans": "fungal",
+    "L.monocytogenes": "gram_positive",
+    "B.cereus": "gram_positive",
+    "E.cloacae": "gram_negative",
+    "S.cerevisiae": "fungal",
+    "B.megaterium": "gram_positive",
+    "S.pyogenes": "gram_positive",
+    "C.parapsilosis": "fungal",
+    "F.oxysporum": "fungal",
+    "S.mutans": "gram_positive"
+  },
+  "deltas": {
+    "delta_cross_attention_live": 0.17045454545454541,
+    "delta_dual_live": 0.04734848484848486,
+    "delta_entity_only_live": 0.045454545454545414
+  },
+  "results": {
+    "cross_attention_live": {
+      "overall_accuracy": 0.8541666666666666,
+      "temperature": 1.4455771124930687,
+      "calibration": {
+        "raw": {
+          "n": 528,
+          "accuracy": 0.8541666666666666,
+          "chance": 0.5,
+          "lift_over_chance": 0.7083333333333333,
+          "nll": 0.3319294199497699,
+          "brier": 0.20391922299422655,
+          "ece": 0.030282868971293852,
+          "mce": 0.057841163478933644,
+          "mean_confidence": 0.8533915897240084,
+          "overconfidence": -0.0007750769426582149
+        },
+        "calibrated": {
+          "n": 528,
+          "accuracy": 0.8541666666666666,
+          "chance": 0.5,
+          "lift_over_chance": 0.7083333333333333,
+          "nll": 0.34608219738161317,
+          "brier": 0.21276671861517243,
+          "ece": 0.05871279350285034,
+          "mce": 0.12526569509000396,
+          "mean_confidence": 0.8032031979153696,
+          "overconfidence": -0.05096346875129698
+        }
+      },
+      "per_task": {
+        "B.cereus": {
+          "acc": 0.9016393442622951,
+          "acc_ci95": 0.07473401051194291,
+          "lift": 0.3606557377049181,
+          "lift_is_significant": true
+        },
+        "C.albicans": {
+          "acc": 0.8909090909090909,
+          "acc_ci95": 0.08239212467745638,
+          "lift": 0.34545454545454546,
+          "lift_is_significant": true
+        },
+        "K.pneumoniae": {
+          "acc": 0.8344827586206897,
+          "acc_ci95": 0.06049261712302623,
+          "lift": 0.2896551724137931,
+          "lift_is_significant": true
+        },
+        "S.epidermidis": {
+          "acc": 0.8333333333333334,
+          "acc_ci95": 0.05848271471322035,
+          "lift": 0.3076923076923077,
+          "lift_is_significant": true
+        },
+        "S.typhimurium": {
+          "acc": 0.8648648648648649,
+          "acc_ci95": 0.06359937520907144,
+          "lift": 0.33333333333333337,
+          "lift_is_significant": true
+        }
+      },
+      "encoder_drift": 0.00045934102231453953,
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.648947806387548,
+          "val_loss": 0.5773836970329285,
+          "seconds": 4.581032752990723
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.5373764367082424,
+          "val_loss": 0.5534239411354065,
+          "seconds": 3.737921953201294
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.4964293113578761,
+          "val_loss": 0.534522533416748,
+          "seconds": 3.7022387981414795
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.43382505341627753,
+          "val_loss": 0.467077374458313,
+          "seconds": 3.7727010250091553
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.3832862978627221,
+          "val_loss": 0.481172114610672,
+          "seconds": 3.740144968032837
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.36085680503607503,
+          "val_loss": 0.45874667167663574,
+          "seconds": 3.7056920528411865
+        }
+      ],
+      "text_encoder_drift": 0.0,
+      "encoder": {
+        "live": true,
+        "text_live": false,
+        "arch_version": 2
+      },
+      "mechanism_swap": {
+        "own_prompt_accuracy": 0.8541666666666666,
+        "swapped_prompt_accuracy": 0.8579545454545454,
+        "drop": -0.0037878787878787845,
+        "drop_is_significant": false,
+        "combined_ci95": 0.05988228597892317,
+        "per_task_own": {
+          "B.cereus": {
+            "acc": 0.9016393442622951,
+            "acc_ci95": 0.07473401051194291,
+            "n": 61
+          },
+          "C.albicans": {
+            "acc": 0.8909090909090909,
+            "acc_ci95": 0.08239212467745638,
+            "n": 55
+          },
+          "K.pneumoniae": {
+            "acc": 0.8344827586206897,
+            "acc_ci95": 0.06049261712302623,
+            "n": 145
+          },
+          "S.epidermidis": {
+            "acc": 0.8333333333333334,
+            "acc_ci95": 0.05848271471322035,
+            "n": 156
+          },
+          "S.typhimurium": {
+            "acc": 0.8648648648648649,
+            "acc_ci95": 0.06359937520907144,
+            "n": 111
+          }
+        },
+        "per_task_swapped": {
+          "B.cereus": {
+            "acc": 0.9016393442622951,
+            "acc_ci95": 0.07473401051194291,
+            "n": 61
+          },
+          "C.albicans": {
+            "acc": 0.8909090909090909,
+            "acc_ci95": 0.08239212467745638,
+            "n": 55
+          },
+          "K.pneumoniae": {
+            "acc": 0.8413793103448276,
+            "acc_ci95": 0.0594631485709253,
+            "n": 145
+          },
+          "S.epidermidis": {
+            "acc": 0.8461538461538461,
+            "acc_ci95": 0.05661894337498727,
+            "n": 156
+          },
+          "S.typhimurium": {
+            "acc": 0.8558558558558559,
+            "acc_ci95": 0.065342146519813,
+            "n": 111
+          }
+        },
+        "reading": "prompt content is not being used: accuracy survives a prompt from another mechanism family, so the prompt is functioning as a task identifier spelled in English"
+      }
+    },
+    "dual_live": {
+      "overall_accuracy": 0.8579545454545454,
+      "temperature": 1.578142901713727,
+      "calibration": {
+        "raw": {
+          "n": 528,
+          "accuracy": 0.8579545454545454,
+          "chance": 0.5,
+          "lift_over_chance": 0.7159090909090908,
+          "nll": 0.31470479563784765,
+          "brier": 0.19441908085092693,
+          "ece": 0.03049114772830837,
+          "mce": 0.13110377040080645,
+          "mean_confidence": 0.8650956373142232,
+          "overconfidence": 0.007141091859677817
+        },
+        "calibrated": {
+          "n": 528,
+          "accuracy": 0.8579545454545454,
+          "chance": 0.5,
+          "lift_over_chance": 0.7159090909090908,
+          "nll": 0.329699243287993,
+          "brier": 0.2033845616283252,
+          "ece": 0.06415560969265874,
+          "mce": 0.13983877768984365,
+          "mean_confidence": 0.8081497843535986,
+          "overconfidence": -0.04980476110094678
+        }
+      },
+      "per_task": {
+        "B.cereus": {
+          "acc": 0.9016393442622951,
+          "acc_ci95": 0.07473401051194291,
+          "lift": 0.3606557377049181,
+          "lift_is_significant": true
+        },
+        "C.albicans": {
+          "acc": 0.8909090909090909,
+          "acc_ci95": 0.08239212467745638,
+          "lift": 0.34545454545454546,
+          "lift_is_significant": true
+        },
+        "K.pneumoniae": {
+          "acc": 0.8344827586206897,
+          "acc_ci95": 0.06049261712302623,
+          "lift": 0.2896551724137931,
+          "lift_is_significant": true
+        },
+        "S.epidermidis": {
+          "acc": 0.8333333333333334,
+          "acc_ci95": 0.05848271471322035,
+          "lift": 0.3076923076923077,
+          "lift_is_significant": true
+        },
+        "S.typhimurium": {
+          "acc": 0.8828828828828829,
+          "acc_ci95": 0.059821364816066355,
+          "lift": 0.3513513513513513,
+          "lift_is_significant": true
+        }
+      },
+      "encoder_drift": 0.00042616224134833607,
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6036382370927841,
+          "val_loss": 0.7392582297325134,
+          "seconds": 3.635556221008301
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.523613014287167,
+          "val_loss": 0.5458346605300903,
+          "seconds": 3.5649659633636475
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.4986159640825092,
+          "val_loss": 0.5816276669502258,
+          "seconds": 3.6075918674468994
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.41754055715685007,
+          "val_loss": 0.4631725251674652,
+          "seconds": 3.5646772384643555
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.370855328852384,
+          "val_loss": 0.4682128429412842,
+          "seconds": 3.586768865585327
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.34778508967017646,
+          "val_loss": 0.45105627179145813,
+          "seconds": 3.582582950592041
+        }
+      ],
+      "text_encoder_drift": 0.0,
+      "encoder": {
+        "live": true,
+        "text_live": false,
+        "arch_version": 1
+      },
+      "mechanism_swap": {
+        "own_prompt_accuracy": 0.8579545454545454,
+        "swapped_prompt_accuracy": 0.8579545454545454,
+        "drop": 0.0,
+        "drop_is_significant": false,
+        "combined_ci95": 0.0595545456805745,
+        "per_task_own": {
+          "B.cereus": {
+            "acc": 0.9016393442622951,
+            "acc_ci95": 0.07473401051194291,
+            "n": 61
+          },
+          "C.albicans": {
+            "acc": 0.8909090909090909,
+            "acc_ci95": 0.08239212467745638,
+            "n": 55
+          },
+          "K.pneumoniae": {
+            "acc": 0.8344827586206897,
+            "acc_ci95": 0.06049261712302623,
+            "n": 145
+          },
+          "S.epidermidis": {
+            "acc": 0.8333333333333334,
+            "acc_ci95": 0.05848271471322035,
+            "n": 156
+          },
+          "S.typhimurium": {
+            "acc": 0.8828828828828829,
+            "acc_ci95": 0.059821364816066355,
+            "n": 111
+          }
+        },
+        "per_task_swapped": {
+          "B.cereus": {
+            "acc": 0.9016393442622951,
+            "acc_ci95": 0.07473401051194291,
+            "n": 61
+          },
+          "C.albicans": {
+            "acc": 0.8909090909090909,
+            "acc_ci95": 0.08239212467745638,
+            "n": 55
+          },
+          "K.pneumoniae": {
+            "acc": 0.8344827586206897,
+            "acc_ci95": 0.06049261712302623,
+            "n": 145
+          },
+          "S.epidermidis": {
+            "acc": 0.8333333333333334,
+            "acc_ci95": 0.05848271471322035,
+            "n": 156
+          },
+          "S.typhimurium": {
+            "acc": 0.8828828828828829,
+            "acc_ci95": 0.059821364816066355,
+            "n": 111
+          }
+        },
+        "reading": "prompt content is not being used: accuracy survives a prompt from another mechanism family, so the prompt is functioning as a task identifier spelled in English"
+      }
+    },
+    "entity_only_live": {
+      "overall_accuracy": 0.8598484848484849,
+      "temperature": 1.2673123567125462,
+      "calibration": {
+        "raw": {
+          "n": 528,
+          "accuracy": 0.8598484848484849,
+          "chance": 0.5,
+          "lift_over_chance": 0.7196969696969697,
+          "nll": 0.34691788452516004,
+          "brier": 0.21502002924331526,
+          "ece": 0.040750325215016855,
+          "mce": 0.14231322108141675,
+          "mean_confidence": 0.8263523813361481,
+          "overconfidence": -0.03349610351233678
+        },
+        "calibrated": {
+          "n": 528,
+          "accuracy": 0.8598484848484849,
+          "chance": 0.5,
+          "lift_over_chance": 0.7196969696969697,
+          "nll": 0.3581190491176796,
+          "brier": 0.22231980801375698,
+          "ece": 0.06520111759736692,
+          "mce": 0.15718802728275671,
+          "mean_confidence": 0.794647367251118,
+          "overconfidence": -0.06520111759736691
+        }
+      },
+      "per_task": {
+        "B.cereus": {
+          "acc": 0.8852459016393442,
+          "acc_ci95": 0.07998475498079155,
+          "lift": 0.34426229508196726,
+          "lift_is_significant": true
+        },
+        "C.albicans": {
+          "acc": 0.9090909090909091,
+          "acc_ci95": 0.07597698255581754,
+          "lift": 0.36363636363636365,
+          "lift_is_significant": true
+        },
+        "K.pneumoniae": {
+          "acc": 0.8275862068965517,
+          "acc_ci95": 0.061484365465433816,
+          "lift": 0.2827586206896552,
+          "lift_is_significant": true
+        },
+        "S.epidermidis": {
+          "acc": 0.8525641025641025,
+          "acc_ci95": 0.0556363860974221,
+          "lift": 0.32692307692307687,
+          "lift_is_significant": true
+        },
+        "S.typhimurium": {
+          "acc": 0.8738738738738738,
+          "acc_ci95": 0.061762019498482916,
+          "lift": 0.3423423423423423,
+          "lift_is_significant": true
+        }
+      },
+      "encoder_drift": 0.0004325938757977071,
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6344787125653942,
+          "val_loss": 0.5464503765106201,
+          "seconds": 3.7735891342163086
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.5301483257012273,
+          "val_loss": 0.502446711063385,
+          "seconds": 3.693481922149658
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.5016397935053846,
+          "val_loss": 0.5209344029426575,
+          "seconds": 3.7234861850738525
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.41844021667142833,
+          "val_loss": 0.4588771164417267,
+          "seconds": 3.7322850227355957
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.3792087684012084,
+          "val_loss": 0.47783762216567993,
+          "seconds": 3.7104270458221436
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.3414824949848939,
+          "val_loss": 0.46715882420539856,
+          "seconds": 3.67891001701355
+        }
+      ],
+      "text_encoder_drift": 0.0,
+      "encoder": {
+        "live": true,
+        "text_live": false,
+        "arch_version": 2
+      }
+    },
+    "cross_attention_frozen": {
+      "overall_accuracy": 0.6837121212121212,
+      "temperature": 0.8539076160365762,
+      "calibration": {
+        "raw": {
+          "n": 528,
+          "accuracy": 0.6837121212121212,
+          "chance": 0.5,
+          "lift_over_chance": 0.36742424242424243,
+          "nll": 0.5573518343750345,
+          "brier": 0.38323626059151317,
+          "ece": 0.09389596461956984,
+          "mce": 0.21409096212038714,
+          "mean_confidence": 0.6710371710832281,
+          "overconfidence": -0.012674950128893081
+        },
+        "calibrated": {
+          "n": 528,
+          "accuracy": 0.6837121212121212,
+          "chance": 0.5,
+          "lift_over_chance": 0.36742424242424243,
+          "nll": 0.5516725376401712,
+          "brier": 0.3808235389000157,
+          "ece": 0.10123185123668826,
+          "mce": 0.12546663659303958,
+          "mean_confidence": 0.6921921993005218,
+          "overconfidence": 0.008480078088400567
+        }
+      },
+      "per_task": {
+        "B.cereus": {
+          "acc": 0.6885245901639344,
+          "acc_ci95": 0.11621515466171063,
+          "lift": 0.14754098360655743,
+          "lift_is_significant": false
+        },
+        "C.albicans": {
+          "acc": 0.7272727272727273,
+          "acc_ci95": 0.1177030352535091,
+          "lift": 0.18181818181818188,
+          "lift_is_significant": false
+        },
+        "K.pneumoniae": {
+          "acc": 0.6275862068965518,
+          "acc_ci95": 0.07869038027721913,
+          "lift": 0.08275862068965523,
+          "lift_is_significant": false
+        },
+        "S.epidermidis": {
+          "acc": 0.7051282051282052,
+          "acc_ci95": 0.07155573256438935,
+          "lift": 0.17948717948717952,
+          "lift_is_significant": true
+        },
+        "S.typhimurium": {
+          "acc": 0.7027027027027027,
+          "acc_ci95": 0.08503072351793997,
+          "lift": 0.1711711711711712,
+          "lift_is_significant": false
+        }
+      },
+      "encoder": {
+        "live": false,
+        "arch_version": 2
+      },
+      "mechanism_swap": {
+        "own_prompt_accuracy": 0.6837121212121212,
+        "swapped_prompt_accuracy": 0.6799242424242424,
+        "drop": 0.0037878787878787845,
+        "drop_is_significant": false,
+        "combined_ci95": 0.07945787329679065,
+        "per_task_own": {
+          "B.cereus": {
+            "acc": 0.6885245901639344,
+            "acc_ci95": 0.11621515466171063,
+            "n": 61
+          },
+          "C.albicans": {
+            "acc": 0.7272727272727273,
+            "acc_ci95": 0.1177030352535091,
+            "n": 55
+          },
+          "K.pneumoniae": {
+            "acc": 0.6275862068965518,
+            "acc_ci95": 0.07869038027721913,
+            "n": 145
+          },
+          "S.epidermidis": {
+            "acc": 0.7051282051282052,
+            "acc_ci95": 0.07155573256438935,
+            "n": 156
+          },
+          "S.typhimurium": {
+            "acc": 0.7027027027027027,
+            "acc_ci95": 0.08503072351793997,
+            "n": 111
+          }
+        },
+        "per_task_swapped": {
+          "B.cereus": {
+            "acc": 0.6885245901639344,
+            "acc_ci95": 0.11621515466171063,
+            "n": 61
+          },
+          "C.albicans": {
+            "acc": 0.7272727272727273,
+            "acc_ci95": 0.1177030352535091,
+            "n": 55
+          },
+          "K.pneumoniae": {
+            "acc": 0.6206896551724138,
+            "acc_ci95": 0.07897809743551437,
+            "n": 145
+          },
+          "S.epidermidis": {
+            "acc": 0.6987179487179487,
+            "acc_ci95": 0.07199981023012392,
+            "n": 156
+          },
+          "S.typhimurium": {
+            "acc": 0.7027027027027027,
+            "acc_ci95": 0.08503072351793997,
+            "n": 111
+          }
+        },
+        "reading": "prompt content is not being used: accuracy survives a prompt from another mechanism family, so the prompt is functioning as a task identifier spelled in English"
+      },
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6511583321699876,
+          "val_loss": 0.5930325984954834,
+          "seconds": 0.5139682292938232
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.5729121472521276,
+          "val_loss": 0.6087680459022522,
+          "seconds": 0.4101438522338867
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.5444441431174059,
+          "val_loss": 0.6033530831336975,
+          "seconds": 0.4186842441558838
+        }
+      ]
+    },
+    "dual_frozen": {
+      "overall_accuracy": 0.8106060606060606,
+      "temperature": 1.3835304825425485,
+      "calibration": {
+        "raw": {
+          "n": 528,
+          "accuracy": 0.8106060606060606,
+          "chance": 0.5,
+          "lift_over_chance": 0.6212121212121211,
+          "nll": 0.39818698938435143,
+          "brier": 0.2547796688085252,
+          "ece": 0.02414109331182394,
+          "mce": 0.07860407416979576,
+          "mean_confidence": 0.8032310043724346,
+          "overconfidence": -0.007375056233625998
+        },
+        "calibrated": {
+          "n": 528,
+          "accuracy": 0.8106060606060606,
+          "chance": 0.5,
+          "lift_over_chance": 0.6212121212121211,
+          "nll": 0.40545700385038397,
+          "brier": 0.26152036816512036,
+          "ece": 0.050651710775785404,
+          "mce": 0.13389650570863199,
+          "mean_confidence": 0.7646769264132346,
+          "overconfidence": -0.04592913419282596
+        }
+      },
+      "per_task": {
+        "B.cereus": {
+          "acc": 0.8032786885245902,
+          "acc_ci95": 0.09975851643439415,
+          "lift": 0.2622950819672132,
+          "lift_is_significant": true
+        },
+        "C.albicans": {
+          "acc": 0.8545454545454545,
+          "acc_ci95": 0.09317640701885672,
+          "lift": 0.3090909090909091,
+          "lift_is_significant": true
+        },
+        "K.pneumoniae": {
+          "acc": 0.7724137931034483,
+          "acc_ci95": 0.06824487604442125,
+          "lift": 0.22758620689655173,
+          "lift_is_significant": true
+        },
+        "S.epidermidis": {
+          "acc": 0.8205128205128205,
+          "acc_ci95": 0.06022172263845872,
+          "lift": 0.2948717948717948,
+          "lift_is_significant": true
+        },
+        "S.typhimurium": {
+          "acc": 0.8288288288288288,
+          "acc_ci95": 0.07007164568203901,
+          "lift": 0.29729729729729726,
+          "lift_is_significant": true
+        }
+      },
+      "encoder": {
+        "live": false,
+        "arch_version": 1
+      },
+      "mechanism_swap": {
+        "own_prompt_accuracy": 0.8106060606060606,
+        "swapped_prompt_accuracy": 0.8106060606060606,
+        "drop": 0.0,
+        "drop_is_significant": false,
+        "combined_ci95": 0.06684317459325377,
+        "per_task_own": {
+          "B.cereus": {
+            "acc": 0.8032786885245902,
+            "acc_ci95": 0.09975851643439415,
+            "n": 61
+          },
+          "C.albicans": {
+            "acc": 0.8545454545454545,
+            "acc_ci95": 0.09317640701885672,
+            "n": 55
+          },
+          "K.pneumoniae": {
+            "acc": 0.7724137931034483,
+            "acc_ci95": 0.06824487604442125,
+            "n": 145
+          },
+          "S.epidermidis": {
+            "acc": 0.8205128205128205,
+            "acc_ci95": 0.06022172263845872,
+            "n": 156
+          },
+          "S.typhimurium": {
+            "acc": 0.8288288288288288,
+            "acc_ci95": 0.07007164568203901,
+            "n": 111
+          }
+        },
+        "per_task_swapped": {
+          "B.cereus": {
+            "acc": 0.8032786885245902,
+            "acc_ci95": 0.09975851643439415,
+            "n": 61
+          },
+          "C.albicans": {
+            "acc": 0.8545454545454545,
+            "acc_ci95": 0.09317640701885672,
+            "n": 55
+          },
+          "K.pneumoniae": {
+            "acc": 0.7724137931034483,
+            "acc_ci95": 0.06824487604442125,
+            "n": 145
+          },
+          "S.epidermidis": {
+            "acc": 0.8205128205128205,
+            "acc_ci95": 0.06022172263845872,
+            "n": 156
+          },
+          "S.typhimurium": {
+            "acc": 0.8288288288288288,
+            "acc_ci95": 0.07007164568203901,
+            "n": 111
+          }
+        },
+        "reading": "prompt content is not being used: accuracy survives a prompt from another mechanism family, so the prompt is functioning as a task identifier spelled in English"
+      },
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6083305321718804,
+          "val_loss": 0.7871196866035461,
+          "seconds": 0.2810499668121338
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.5538638555328705,
+          "val_loss": 0.5541595816612244,
+          "seconds": 0.2451949119567871
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.5476034724062688,
+          "val_loss": 0.6351022124290466,
+          "seconds": 0.24579405784606934
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.4820891794747424,
+          "val_loss": 0.4925805628299713,
+          "seconds": 0.26643896102905273
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.459128085349147,
+          "val_loss": 0.49852198362350464,
+          "seconds": 0.2396092414855957
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.4356424258160198,
+          "val_loss": 0.4871298372745514,
+          "seconds": 0.248046875
+        }
+      ]
+    },
+    "entity_only_frozen": {
+      "overall_accuracy": 0.8143939393939394,
+      "temperature": 1.2129171534756507,
+      "calibration": {
+        "raw": {
+          "n": 528,
+          "accuracy": 0.8143939393939394,
+          "chance": 0.5,
+          "lift_over_chance": 0.6287878787878789,
+          "nll": 0.38920168019732587,
+          "brier": 0.25221181414253335,
+          "ece": 0.02400327539062707,
+          "mce": 0.09247997560923737,
+          "mean_confidence": 0.7969014146460007,
+          "overconfidence": -0.01749252474793872
+        },
+        "calibrated": {
+          "n": 528,
+          "accuracy": 0.8143939393939394,
+          "chance": 0.5,
+          "lift_over_chance": 0.6287878787878789,
+          "nll": 0.39534597306942476,
+          "brier": 0.2560794368432568,
+          "ece": 0.04102839523231453,
+          "mce": 0.14199139801144678,
+          "mean_confidence": 0.7733655441616248,
+          "overconfidence": -0.04102839523231461
+        }
+      },
+      "per_task": {
+        "B.cereus": {
+          "acc": 0.8032786885245902,
+          "acc_ci95": 0.09975851643439415,
+          "lift": 0.2622950819672132,
+          "lift_is_significant": true
+        },
+        "C.albicans": {
+          "acc": 0.8727272727272727,
+          "acc_ci95": 0.08808088626040121,
+          "lift": 0.32727272727272727,
+          "lift_is_significant": true
+        },
+        "K.pneumoniae": {
+          "acc": 0.7793103448275862,
+          "acc_ci95": 0.06750225463696331,
+          "lift": 0.23448275862068968,
+          "lift_is_significant": true
+        },
+        "S.epidermidis": {
+          "acc": 0.8397435897435898,
+          "acc_ci95": 0.057567162830171804,
+          "lift": 0.3141025641025641,
+          "lift_is_significant": true
+        },
+        "S.typhimurium": {
+          "acc": 0.8018018018018018,
+          "acc_ci95": 0.07416140464402235,
+          "lift": 0.2702702702702703,
+          "lift_is_significant": true
+        }
+      },
+      "encoder": {
+        "live": false,
+        "arch_version": 2
+      },
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6293097111712441,
+          "val_loss": 0.5962620973587036,
+          "seconds": 0.39302587509155273
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.5476846203025404,
+          "val_loss": 0.5307523608207703,
+          "seconds": 0.37830090522766113
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.52809910755093,
+          "val_loss": 0.5823488831520081,
+          "seconds": 0.3760221004486084
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.4921377577205524,
+          "val_loss": 0.4830024838447571,
+          "seconds": 0.3763411045074463
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.4515217900225821,
+          "val_loss": 0.4708733856678009,
+          "seconds": 0.3729219436645508
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.4234069231873985,
+          "val_loss": 0.46729934215545654,
+          "seconds": 0.3796849250793457
+        }
+      ]
+    },
+    "task_id_frozen": {
+      "overall_accuracy": 0.48674242424242425,
+      "temperature": 1.5104063224711297,
+      "calibration": {
+        "raw": {
+          "n": 528,
+          "accuracy": 0.48674242424242425,
+          "chance": 0.5,
+          "lift_over_chance": -0.02651515151515149,
+          "nll": 0.6931471805599453,
+          "brier": 0.5,
+          "ece": 0.013257575757575746,
+          "mce": 0.013257575757575746,
+          "mean_confidence": 0.5,
+          "overconfidence": 0.013257575757575746
+        },
+        "calibrated": {
+          "n": 528,
+          "accuracy": 0.48674242424242425,
+          "chance": 0.5,
+          "lift_over_chance": -0.02651515151515149,
+          "nll": 0.6931471805599453,
+          "brier": 0.5,
+          "ece": 0.013257575757575746,
+          "mce": 0.013257575757575746,
+          "mean_confidence": 0.5,
+          "overconfidence": 0.013257575757575746
+        }
+      },
+      "per_task": {
+        "B.cereus": {
+          "acc": 0.5409836065573771,
+          "acc_ci95": 0.12505391843584007,
+          "lift": 1.1102230246251565e-16,
+          "lift_is_significant": false
+        },
+        "C.albicans": {
+          "acc": 0.45454545454545453,
+          "acc_ci95": 0.13159599399245026,
+          "lift": -0.09090909090909088,
+          "lift_is_significant": false
+        },
+        "K.pneumoniae": {
+          "acc": 0.45517241379310347,
+          "acc_ci95": 0.08105682369697237,
+          "lift": -0.08965517241379306,
+          "lift_is_significant": false
+        },
+        "S.epidermidis": {
+          "acc": 0.47435897435897434,
+          "acc_ci95": 0.07835955479956168,
+          "lift": -0.05128205128205132,
+          "lift_is_significant": false
+        },
+        "S.typhimurium": {
+          "acc": 0.5315315315315315,
+          "acc_ci95": 0.09283233638299092,
+          "lift": 0.0,
+          "lift_is_significant": false
+        }
+      },
+      "encoder": {
+        "live": false,
+        "arch_version": 2
+      },
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6804122978944943,
+          "val_loss": 0.6608090400695801,
+          "seconds": 0.38582301139831543
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.582620528928328,
+          "val_loss": 0.5606851577758789,
+          "seconds": 0.39035916328430176
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.551415148318242,
+          "val_loss": 0.6211036443710327,
+          "seconds": 0.38634681701660156
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.48415421058369124,
+          "val_loss": 0.5179839730262756,
+          "seconds": 0.3881092071533203
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.45202226605050716,
+          "val_loss": 0.5098517537117004,
+          "seconds": 0.3957991600036621
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.41281995699785407,
+          "val_loss": 0.5023933053016663,
+          "seconds": 0.3917849063873291
+        }
+      ]
+    },
+    "question_only_frozen": {
+      "overall_accuracy": 0.5132575757575758,
+      "temperature": 1.1110307403154935,
+      "calibration": {
+        "raw": {
+          "n": 528,
+          "accuracy": 0.5132575757575758,
+          "chance": 0.5,
+          "lift_over_chance": 0.026515151515151603,
+          "nll": 0.6933155987164489,
+          "brier": 0.5001672283134179,
+          "ece": 0.01662434011863001,
+          "mce": 0.01662434011863001,
+          "mean_confidence": 0.5298819158762058,
+          "overconfidence": 0.01662434011863001
+        },
+        "calibrated": {
+          "n": 528,
+          "accuracy": 0.5132575757575758,
+          "chance": 0.5,
+          "lift_over_chance": 0.026515151515151603,
+          "nll": 0.6931376412203941,
+          "brier": 0.4999898287430474,
+          "ece": 0.013644222446683285,
+          "mce": 0.013644222446683285,
+          "mean_confidence": 0.5269017982042591,
+          "overconfidence": 0.013644222446683285
+        }
+      },
+      "per_task": {
+        "B.cereus": {
+          "acc": 0.45901639344262296,
+          "acc_ci95": 0.12505391843584007,
+          "lift": -0.08196721311475402,
+          "lift_is_significant": false
+        },
+        "C.albicans": {
+          "acc": 0.5454545454545454,
+          "acc_ci95": 0.13159599399245026,
+          "lift": 0.0,
+          "lift_is_significant": false
+        },
+        "K.pneumoniae": {
+          "acc": 0.5448275862068965,
+          "acc_ci95": 0.08105682369697237,
+          "lift": 0.0,
+          "lift_is_significant": false
+        },
+        "S.epidermidis": {
+          "acc": 0.5256410256410257,
+          "acc_ci95": 0.07835955479956168,
+          "lift": 0.0,
+          "lift_is_significant": false
+        },
+        "S.typhimurium": {
+          "acc": 0.46846846846846846,
+          "acc_ci95": 0.09283233638299092,
+          "lift": -0.06306306306306309,
+          "lift_is_significant": false
+        }
+      },
+      "encoder": {
+        "live": false,
+        "arch_version": 2
+      },
+      "mechanism_swap": {
+        "own_prompt_accuracy": 0.5132575757575758,
+        "swapped_prompt_accuracy": 0.5132575757575758,
+        "drop": 0.0,
+        "drop_is_significant": false,
+        "combined_ci95": 0.08526806160970181,
+        "per_task_own": {
+          "B.cereus": {
+            "acc": 0.45901639344262296,
+            "acc_ci95": 0.12505391843584007,
+            "n": 61
+          },
+          "C.albicans": {
+            "acc": 0.5454545454545454,
+            "acc_ci95": 0.13159599399245026,
+            "n": 55
+          },
+          "K.pneumoniae": {
+            "acc": 0.5448275862068965,
+            "acc_ci95": 0.08105682369697237,
+            "n": 145
+          },
+          "S.epidermidis": {
+            "acc": 0.5256410256410257,
+            "acc_ci95": 0.07835955479956168,
+            "n": 156
+          },
+          "S.typhimurium": {
+            "acc": 0.46846846846846846,
+            "acc_ci95": 0.09283233638299092,
+            "n": 111
+          }
+        },
+        "per_task_swapped": {
+          "B.cereus": {
+            "acc": 0.45901639344262296,
+            "acc_ci95": 0.12505391843584007,
+            "n": 61
+          },
+          "C.albicans": {
+            "acc": 0.5454545454545454,
+            "acc_ci95": 0.13159599399245026,
+            "n": 55
+          },
+          "K.pneumoniae": {
+            "acc": 0.5448275862068965,
+            "acc_ci95": 0.08105682369697237,
+            "n": 145
+          },
+          "S.epidermidis": {
+            "acc": 0.5256410256410257,
+            "acc_ci95": 0.07835955479956168,
+            "n": 156
+          },
+          "S.typhimurium": {
+            "acc": 0.46846846846846846,
+            "acc_ci95": 0.09283233638299092,
+            "n": 111
+          }
+        },
+        "reading": "prompt content is not being used: accuracy survives a prompt from another mechanism family, so the prompt is functioning as a task identifier spelled in English"
+      },
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6950411236784757,
+          "val_loss": 0.7034900188446045,
+          "seconds": 0.35082077980041504
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.6959738974637707,
+          "val_loss": 0.6953986287117004,
+          "seconds": 0.348067045211792
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.6949667434023562,
+          "val_loss": 0.6918144226074219,
+          "seconds": 0.34033679962158203
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.6951823209376591,
+          "val_loss": 0.6916998028755188,
+          "seconds": 0.32224273681640625
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.6916591938810103,
+          "val_loss": 0.691750705242157,
+          "seconds": 0.36318397521972656
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.6917462685866652,
+          "val_loss": 0.6918103098869324,
+          "seconds": 0.3530597686767578
+        }
+      ]
+    }
+  }
+}

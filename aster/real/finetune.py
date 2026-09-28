@@ -55,6 +55,83 @@ LIVE_PROTEIN_MODES = ("dual", "entity_only")
 LIVE_TEXT_MODES = ("dual", "question_only")
 
 
+def cache_frozen_prefix(encoder, input_ids, attention_mask, trainable_blocks,
+                        batch_size=16):
+    """Cache exact FP32 inputs to the trainable suffix, once per unique sequence.
+
+    Uses the model's own forward path up to the boundary, including embeddings
+    and rotary positions. Only frozen computation is cached; no final embeddings
+    or trainable-layer outputs are reused during training. The cache stays on CPU.
+    """
+    layers = encoder.encoder.layer
+    start = len(layers) - trainable_blocks
+    if not 0 < start < len(layers):
+        raise ValueError("Prefix caching needs both frozen and trainable blocks")
+    prefix = [encoder.embeddings, *layers[:start]]
+    if any(p.requires_grad for module in prefix for p in module.parameters()):
+        raise ValueError("Cannot cache a prefix containing trainable parameters")
+    if getattr(encoder.config, "is_decoder", False):
+        raise ValueError("Prefix caching supports encoder-only ESM models")
+
+    class BoundaryReached(Exception):
+        pass
+
+    captured = {}
+
+    def capture(module, args):
+        captured["hidden"] = args[0].detach().cpu()
+        raise BoundaryReached
+
+    device = next(encoder.parameters()).device
+    states = torch.empty(len(input_ids), input_ids.shape[1],
+                         encoder.config.hidden_size, dtype=encoder.dtype)
+    was_training = encoder.training
+    encoder.eval()
+    hook = layers[start].register_forward_pre_hook(capture)
+    try:
+        with torch.no_grad():
+            for offset in range(0, len(input_ids), batch_size):
+                sl = slice(offset, offset + batch_size)
+                try:
+                    encoder(input_ids=input_ids[sl].to(device),
+                            attention_mask=attention_mask[sl].to(device))
+                except BoundaryReached:
+                    states[sl].copy_(captured.pop("hidden"))
+                else:
+                    raise RuntimeError("Frozen-prefix boundary was never reached")
+                if offset % (batch_size * 20) == 0:
+                    print(f"    prefix {min(offset + batch_size, len(input_ids))}"
+                          f"/{len(input_ids)}", flush=True)
+    finally:
+        hook.remove()
+        encoder.train(was_training)
+    return states
+
+
+def pooled_suffix(encoder, hidden_states, attention_mask, trainable_blocks):
+    """Recompute every trainable ESM block and the final norm with gradients."""
+    extended = encoder.get_extended_attention_mask(
+        attention_mask, attention_mask.shape, dtype=hidden_states.dtype)
+    for layer in encoder.encoder.layer[-trainable_blocks:]:
+        hidden_states = layer(hidden_states, attention_mask=extended)
+        # Transformers releases have returned either a tensor or a tuple here.
+        if isinstance(hidden_states, tuple):
+            hidden_states = hidden_states[0]
+    norm = encoder.encoder.emb_layer_norm_after
+    if norm is not None:
+        hidden_states = norm(hidden_states)
+    mask = attention_mask.unsqueeze(-1).to(hidden_states.dtype)
+    return (hidden_states * mask).sum(1) / mask.sum(1).clamp_min(1)
+
+
+def snapshot_trainable_state(model):
+    """Checkpoint changing weights and buffers without copying frozen encoders."""
+    names = {name for name, p in model.named_parameters() if p.requires_grad}
+    names.update(name for name, _ in model.named_buffers())
+    return {name: value.detach().cpu().clone()
+            for name, value in model.state_dict().items() if name in names}
+
+
 def load_protein_encoder(model: str = "8M", trainable_blocks: int = 2,
                          device: str = "cpu", revision: str | None = None):
     """ESM-2 with only the last `trainable_blocks` blocks (plus final norm) trainable."""
@@ -140,13 +217,20 @@ class LiveAster(nn.Module):
     def __init__(self, head: nn.Module, encoder: nn.Module,
                  text_encoder: nn.Module | None = None,
                  questions: TextTable | None = None,
-                 answers: TextTable | None = None):
+                 answers: TextTable | None = None,
+                 prefix_states: torch.Tensor | None = None,
+                 trainable_blocks: int | None = None):
         super().__init__()
         self.head = head
         self.encoder = encoder
         self.text_encoder = text_encoder
         self.questions = questions
         self.answers = answers
+        # Plain CPU attribute, deliberately not a buffer moved by model.to().
+        self.prefix_states = prefix_states
+        self.trainable_blocks = trainable_blocks
+        if prefix_states is not None and not trainable_blocks:
+            raise ValueError("Cached prefix requires a trainable suffix length")
         if text_encoder is not None and (questions is None or answers is None):
             raise ValueError("A live text encoder needs question and answer tables")
 
@@ -154,7 +238,21 @@ class LiveAster(nn.Module):
     def text_is_live(self) -> bool:
         return self.text_encoder is not None
 
+    def train(self, mode=True):
+        super().train(mode)
+        # Match deterministic frozen-prefix caching and frozen references.
+        # eval() disables dropout; it does not disable suffix gradients.
+        self.encoder.eval()
+        if self.text_encoder is not None:
+            self.text_encoder.eval()
+        return self
+
     def encode(self, batch) -> torch.Tensor:
+        if self.prefix_states is not None:
+            states = self.prefix_states[batch["prefix_idx"].cpu()].to(
+                batch["attention_mask"].device)
+            return pooled_suffix(self.encoder, states, batch["attention_mask"],
+                                 self.trainable_blocks)
         return pooled(self.encoder, {
             "input_ids": batch["input_ids"],
             "attention_mask": batch["attention_mask"],
