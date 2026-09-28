@@ -137,3 +137,24 @@ def test_disjoint_sequences_keeps_a_peptide_out_of_two_splits(tmp_path):
     # appears in both; the flag is recorded so the report cannot be misread.
     assert all(spec["disjoint_sequences"] for spec in meta.values())
     assert trainish
+
+
+@pytest.mark.parametrize("mu", ["\u00b5M", "\u03bcM", "HC50 (uM)", "MIC_uM"])
+def test_concentration_column_is_found_whichever_mu_the_export_used(tmp_path, mu):
+    """The real HemoPI2 download spells micromolar with GREEK SMALL LETTER MU.
+
+    An earlier version matched only MICRO SIGN (U+00B5) and rejected that file
+    outright, reporting it as having no concentration column. Both characters,
+    and a plain ASCII spelling, must resolve to the same column.
+    """
+    path = tmp_path / "mu.csv"
+    pd.DataFrame(HEMO, columns=["SEQUENCE", mu]).to_csv(path, index=False)
+    table = load_property_table("hemolytic", path)
+    assert len(table.frame) == len(HEMO)
+    assert table.frame["concentration"].max() == pytest.approx(596.7)
+
+
+def test_fold_normalises_both_mu_characters():
+    from aster.real.properties import _fold
+
+    assert _fold("\u00b5M") == _fold("\u03bcM") == "um"

@@ -44,6 +44,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import unicodedata
 import numpy as np
 import pandas as pd
 
@@ -86,6 +87,19 @@ PROPERTIES = {
         ),
     },
 }
+
+
+def _fold(text: str) -> str:
+    """Lowercase and normalise the two mu characters to a plain ``u``.
+
+    Real exports spell micromolar with either MICRO SIGN (U+00B5) or GREEK SMALL
+    LETTER MU (U+03BC); the HemoPI2 download uses the Greek one. Matching the raw
+    string silently fails on whichever variant was not anticipated, which is how
+    this loader first rejected a perfectly good file. NFKC alone does not help:
+    it folds the micro sign onto the Greek mu rather than onto an ASCII u.
+    """
+    folded = unicodedata.normalize("NFKC", str(text)).lower()
+    return folded.replace("\u00b5", "u").replace("\u03bc", "u")
 
 
 @dataclass(frozen=True)
@@ -147,9 +161,9 @@ def load_property_table(
             f"{path}: no {sequence_column!r} column; found {list(frame.columns)}")
 
     if concentration_column is None:
-        wanted = (spec["units"].lower(), spec["measure"].lower(), "µm", "um")
+        wanted = (_fold(spec["units"]), _fold(spec["measure"]), "um", "hc50", "mic")
         matches = [c for c in frame.columns
-                   if any(w in str(c).lower() for w in wanted)]
+                   if any(w in _fold(c) for w in wanted)]
         if not matches:
             raise ValueError(
                 f"{path}: no concentration column found for {name} "
