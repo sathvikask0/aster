@@ -252,6 +252,7 @@ def build_property_benchmark(
     thresholds: dict[str, float] | None = None,
     seed: int = 42,
     val_fraction: float = 0.15,
+    test_fraction: float = 0.3,
     balance_tasks: bool = True,
     disjoint_sequences: bool = False,
 ) -> tuple[list[Example], dict[str, dict]]:
@@ -269,7 +270,12 @@ def build_property_benchmark(
     unknown = set(test_tasks) - set(tables)
     if unknown:
         raise ValueError(f"Held-out tasks not present in the data: {sorted(unknown)}")
-    if len(test_tasks) >= len(tables):
+    # test_tasks=() is the in-distribution rung: no property is held out and each
+    # property's own rows are split. It answers "can the model learn this property
+    # at all", which has to be yes before a failure to transfer says anything
+    # about the premise rather than about the model.
+    in_distribution = not test_tasks
+    if not in_distribution and len(test_tasks) >= len(tables):
         raise ValueError("At least one property must remain for training")
 
     rng = np.random.default_rng(seed)
@@ -304,6 +310,7 @@ def build_property_benchmark(
 
         held_out = name in test_tasks
         meta[name] = {
+            "in_distribution": in_distribution,
             "type": spec["family"],
             "prompt_family": spec["family"],
             "question": spec["question"],
@@ -324,6 +331,12 @@ def build_property_benchmark(
         for seq, label in zip(rows["sequence"], rows["label"]):
             if held_out:
                 split = "test"
+            elif in_distribution:
+                # A per-row draw, so the same property supplies all three splits.
+                draw = rng.random()
+                split = ("test" if draw < test_fraction
+                         else "val" if draw < test_fraction + val_fraction
+                         else "train")
             elif disjoint_sequences:
                 split = split_of[seq]
             else:

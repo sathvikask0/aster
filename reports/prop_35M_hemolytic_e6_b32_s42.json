@@ -1,0 +1,821 @@
+{
+  "config": {
+    "command": "scripts/run_amp_finetune.py --benchmark properties --held-out-property hemolytic --esm 35M --trainable-blocks 2 --epochs 6 --batch-size 32 --seed 42 --device mps --out reports/prop_35M_hemolytic_e6_b32_s42.json",
+    "esm": "35M",
+    "protein_revision": "6fbf070e65b0b7291e7bbcd451118c216cff79d8",
+    "device": "mps",
+    "torch_version": "2.14.0",
+    "trainable_blocks": 2,
+    "encoder_trainable": {
+      "trainable_params": 5543040,
+      "total_params": 33500401,
+      "trainable_fraction": 0.16546,
+      "trainable_modules": [
+        "encoder.emb_layer_norm_after.bias",
+        "encoder.emb_layer_norm_after.weight",
+        "encoder.layer.10",
+        "encoder.layer.11"
+      ]
+    },
+    "epochs": 6,
+    "batch_size": 32,
+    "head_lr": 0.001,
+    "encoder_lr": 2e-05,
+    "max_len": 64,
+    "max_peptides": null,
+    "training_protocol_version": 2,
+    "frozen_reference_epochs": 6,
+    "frozen_reference_batch_size": 32,
+    "cache_frozen_prefix": false,
+    "prefix_cache_dtype": null,
+    "min_samples": 400,
+    "seed": 42,
+    "benchmark": "properties",
+    "held_out_property": "hemolytic",
+    "property_thresholds": {
+      "antimicrobial": 32.0,
+      "hemolytic": 100.0
+    },
+    "negatives_are_measured": true,
+    "disjoint_sequences": false,
+    "negative_policy": "matched",
+    "balance_tasks": true,
+    "text_encoder": "sentence-transformers/all-MiniLM-L6-v2",
+    "text_encoder_dim": 384,
+    "text_encoder_trainable": false,
+    "text_trainable_blocks": 0,
+    "text_lr": null,
+    "text_encoder_trainable_report": null,
+    "live_text_modes": [],
+    "label_semantics_version": 2,
+    "frozen_reference_included": true,
+    "n_train": 1930,
+    "n_val": 352,
+    "n_test": 1424,
+    "train_test_shared_sequences": 265
+  },
+  "reporting_rule": "Every claim is a margin over 'ceiling' (max of majority and the out-of-fold composition probe), never over task_id. A lift smaller than the combined 95% intervals is not a result.",
+  "reading_notes": [
+    "entity_only_live has a live encoder too; if it moves like the hypothesis model, the gain is peptide classification, not typed decisions.",
+    "Only *_live vs *_frozen isolates unfreezing. task_id and question_only are frozen reference rows, not matched controls.",
+    "encoder_drift ~0 alongside a gain means the encoder did not move and the effect is in the head.",
+    "Tasks are held out; peptide sequences can occur across splits. This run does not establish generalization to unseen peptide families."
+  ],
+  "held_out_tasks": [
+    "hemolytic"
+  ],
+  "ceilings": {
+    "hemolytic": {
+      "n": 1424,
+      "majority": 0.5,
+      "composition_oof": 0.625,
+      "composition_insample": 0.6474719101123596,
+      "ceiling": 0.625,
+      "ceiling_ci95": 0.025145294084713776,
+      "estimator": "logreg(standardized 20-dim AA freq), 5-fold out-of-fold"
+    }
+  },
+  "mechanism_swap_map": {
+    "hemolytic": "antimicrobial"
+  },
+  "prompt_families": {
+    "antimicrobial": "microbial_membrane",
+    "hemolytic": "host_membrane"
+  },
+  "deltas": {
+    "delta_cross_attention_live": 0.0435393258426966,
+    "delta_dual_live": 0.026685393258426893,
+    "delta_entity_only_live": 0.008426966292134797
+  },
+  "results": {
+    "cross_attention_live": {
+      "overall_accuracy": 0.5955056179775281,
+      "temperature": 1.2673123567125462,
+      "calibration": {
+        "raw": {
+          "n": 1424,
+          "accuracy": 0.5955056179775281,
+          "chance": 0.5,
+          "lift_over_chance": 0.1910112359550562,
+          "nll": 0.6666623521615378,
+          "brier": 0.4740544962100835,
+          "ece": 0.0261635183230063,
+          "mce": 0.10807481231331473,
+          "mean_confidence": 0.5887623669153172,
+          "overconfidence": -0.006743251062210853
+        },
+        "calibrated": {
+          "n": 1424,
+          "accuracy": 0.5955056179775281,
+          "chance": 0.5,
+          "lift_over_chance": 0.1910112359550562,
+          "nll": 0.6685046083891696,
+          "brier": 0.47572918205997,
+          "ece": 0.024827497541976037,
+          "mce": 0.035204020897813826,
+          "mean_confidence": 0.5706781204355521,
+          "overconfidence": -0.024827497541975996
+        }
+      },
+      "per_task": {
+        "hemolytic": {
+          "acc": 0.5955056179775281,
+          "acc_ci95": 0.025491785487214626,
+          "lift": -0.0294943820224719,
+          "lift_is_significant": false
+        }
+      },
+      "encoder_drift": 0.0003816880585575551,
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.689621798238606,
+          "val_loss": 0.7371816039085388,
+          "seconds": 7.746173858642578
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.6526274778064668,
+          "val_loss": 0.6521244049072266,
+          "seconds": 7.445036888122559
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.6546696724669303,
+          "val_loss": 0.5826912522315979,
+          "seconds": 7.445865869522095
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.5815083553753986,
+          "val_loss": 0.570443332195282,
+          "seconds": 7.477612018585205
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.5358558669300277,
+          "val_loss": 0.5570868253707886,
+          "seconds": 7.53787899017334
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.5117271923030596,
+          "val_loss": 0.5545492172241211,
+          "seconds": 7.530058860778809
+        }
+      ],
+      "text_encoder_drift": 0.0,
+      "encoder": {
+        "live": true,
+        "text_live": false,
+        "arch_version": 2
+      },
+      "mechanism_swap": {
+        "own_prompt_accuracy": 0.5955056179775281,
+        "swapped_prompt_accuracy": 0.5969101123595506,
+        "drop": -0.001404494382022503,
+        "drop_is_significant": false,
+        "combined_ci95": 0.050969267078401014,
+        "per_task_own": {
+          "hemolytic": {
+            "acc": 0.5955056179775281,
+            "acc_ci95": 0.025491785487214626,
+            "n": 1424
+          }
+        },
+        "per_task_swapped": {
+          "hemolytic": {
+            "acc": 0.5969101123595506,
+            "acc_ci95": 0.025477481591186388,
+            "n": 1424
+          }
+        },
+        "reading": "prompt content is not being used: accuracy survives a prompt from another mechanism family, so the prompt is functioning as a task identifier spelled in English"
+      }
+    },
+    "dual_live": {
+      "overall_accuracy": 0.6158707865168539,
+      "temperature": 1.2673123567125462,
+      "calibration": {
+        "raw": {
+          "n": 1424,
+          "accuracy": 0.6158707865168539,
+          "chance": 0.5,
+          "lift_over_chance": 0.2317415730337078,
+          "nll": 0.7211811222174396,
+          "brier": 0.5013642905169622,
+          "ece": 0.1377145376821559,
+          "mce": 0.20392728329635257,
+          "mean_confidence": 0.747385969475201,
+          "overconfidence": 0.13151518295834708
+        },
+        "calibrated": {
+          "n": 1424,
+          "accuracy": 0.6158707865168539,
+          "chance": 0.5,
+          "lift_over_chance": 0.2317415730337078,
+          "nll": 0.6823665975504893,
+          "brier": 0.48122182172323297,
+          "ece": 0.09512394519634101,
+          "mce": 0.18002098815673606,
+          "mean_confidence": 0.710994731713195,
+          "overconfidence": 0.09512394519634115
+        }
+      },
+      "per_task": {
+        "hemolytic": {
+          "acc": 0.6158707865168539,
+          "acc_ci95": 0.025262978196721644,
+          "lift": -0.009129213483146104,
+          "lift_is_significant": false
+        }
+      },
+      "encoder_drift": 0.0003642028476499884,
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6825921024683226,
+          "val_loss": 0.6211127042770386,
+          "seconds": 7.442214250564575
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.6260496795486292,
+          "val_loss": 0.5875821113586426,
+          "seconds": 7.375010967254639
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.6072036719075139,
+          "val_loss": 0.5679024457931519,
+          "seconds": 7.357157945632935
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.5666506913659486,
+          "val_loss": 0.5948317050933838,
+          "seconds": 7.3568971157073975
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.5329368643501262,
+          "val_loss": 0.5674304366111755,
+          "seconds": 7.343477010726929
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.5125493074637003,
+          "val_loss": 0.578455924987793,
+          "seconds": 7.31096076965332
+        }
+      ],
+      "text_encoder_drift": 0.0,
+      "encoder": {
+        "live": true,
+        "text_live": false,
+        "arch_version": 1
+      },
+      "mechanism_swap": {
+        "own_prompt_accuracy": 0.6158707865168539,
+        "swapped_prompt_accuracy": 0.6158707865168539,
+        "drop": 0.0,
+        "drop_is_significant": false,
+        "combined_ci95": 0.05052595639344329,
+        "per_task_own": {
+          "hemolytic": {
+            "acc": 0.6158707865168539,
+            "acc_ci95": 0.025262978196721644,
+            "n": 1424
+          }
+        },
+        "per_task_swapped": {
+          "hemolytic": {
+            "acc": 0.6158707865168539,
+            "acc_ci95": 0.025262978196721644,
+            "n": 1424
+          }
+        },
+        "reading": "prompt content is not being used: accuracy survives a prompt from another mechanism family, so the prompt is functioning as a task identifier spelled in English"
+      }
+    },
+    "entity_only_live": {
+      "overall_accuracy": 0.6179775280898876,
+      "temperature": 0.974021360549221,
+      "calibration": {
+        "raw": {
+          "n": 1424,
+          "accuracy": 0.6179775280898876,
+          "chance": 0.5,
+          "lift_over_chance": 0.2359550561797752,
+          "nll": 0.6544909758418191,
+          "brier": 0.462738353313082,
+          "ece": 0.06402865456180018,
+          "mce": 0.10495958900599778,
+          "mean_confidence": 0.6790692547174456,
+          "overconfidence": 0.06109172662755802
+        },
+        "calibrated": {
+          "n": 1424,
+          "accuracy": 0.6179775280898876,
+          "chance": 0.5,
+          "lift_over_chance": 0.2359550561797752,
+          "nll": 0.6558508403299095,
+          "brier": 0.46382699348247264,
+          "ece": 0.06812147880458017,
+          "mce": 0.10902243143871282,
+          "mean_confidence": 0.6829906014264103,
+          "overconfidence": 0.06501307333652273
+        }
+      },
+      "per_task": {
+        "hemolytic": {
+          "acc": 0.6179775280898876,
+          "acc_ci95": 0.02523665980188223,
+          "lift": -0.0070224719101124045,
+          "lift_is_significant": false
+        }
+      },
+      "encoder_drift": 0.00018524208239357863,
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6709014606599363,
+          "val_loss": 0.6741243600845337,
+          "seconds": 7.592036962509155
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.6096850508235279,
+          "val_loss": 0.5805144906044006,
+          "seconds": 7.465981960296631
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.5923869222556989,
+          "val_loss": 0.5854071974754333,
+          "seconds": 7.449235916137695
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.557561705396583,
+          "val_loss": 0.5876832604408264,
+          "seconds": 7.447016000747681
+        }
+      ],
+      "text_encoder_drift": 0.0,
+      "encoder": {
+        "live": true,
+        "text_live": false,
+        "arch_version": 2
+      }
+    },
+    "cross_attention_frozen": {
+      "overall_accuracy": 0.5519662921348315,
+      "temperature": 1.2673123567125462,
+      "calibration": {
+        "raw": {
+          "n": 1424,
+          "accuracy": 0.5519662921348315,
+          "chance": 0.5,
+          "lift_over_chance": 0.10393258426966301,
+          "nll": 0.6924454254542396,
+          "brier": 0.4992790849182909,
+          "ece": 0.021713699823751802,
+          "mce": 0.2371879889089581,
+          "mean_confidence": 0.5523307782223837,
+          "overconfidence": 0.00036448608755224043
+        },
+        "calibrated": {
+          "n": 1424,
+          "accuracy": 0.5519662921348315,
+          "chance": 0.5,
+          "lift_over_chance": 0.10393258426966301,
+          "nll": 0.6912629982002093,
+          "brier": 0.4981276070325822,
+          "ece": 0.01051658894864989,
+          "mce": 0.3049598469093916,
+          "mean_confidence": 0.5414497031861815,
+          "overconfidence": -0.01051658894865004
+        }
+      },
+      "per_task": {
+        "hemolytic": {
+          "acc": 0.5519662921348315,
+          "acc_ci95": 0.025829303762919944,
+          "lift": -0.0730337078651685,
+          "lift_is_significant": true
+        }
+      },
+      "encoder": {
+        "live": false,
+        "arch_version": 2
+      },
+      "mechanism_swap": {
+        "own_prompt_accuracy": 0.5519662921348315,
+        "swapped_prompt_accuracy": 0.535814606741573,
+        "drop": 0.016151685393258508,
+        "drop_is_significant": false,
+        "combined_ci95": 0.05173254356678274,
+        "per_task_own": {
+          "hemolytic": {
+            "acc": 0.5519662921348315,
+            "acc_ci95": 0.025829303762919944,
+            "n": 1424
+          }
+        },
+        "per_task_swapped": {
+          "hemolytic": {
+            "acc": 0.535814606741573,
+            "acc_ci95": 0.025903239803862794,
+            "n": 1424
+          }
+        },
+        "reading": "prompt content is not being used: accuracy survives a prompt from another mechanism family, so the prompt is functioning as a task identifier spelled in English"
+      },
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6900097958782176,
+          "val_loss": 0.7588098645210266,
+          "seconds": 0.49619507789611816
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.6425660866529831,
+          "val_loss": 0.60189288854599,
+          "seconds": 0.3905627727508545
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.6190119376454328,
+          "val_loss": 0.5916486978530884,
+          "seconds": 0.3880031108856201
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.5957079056631098,
+          "val_loss": 0.6143588423728943,
+          "seconds": 0.3898580074310303
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.5682797224101624,
+          "val_loss": 0.5858638286590576,
+          "seconds": 0.38864731788635254
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.5439330068585786,
+          "val_loss": 0.5916513800621033,
+          "seconds": 0.39023494720458984
+        }
+      ]
+    },
+    "dual_frozen": {
+      "overall_accuracy": 0.589185393258427,
+      "temperature": 1.1110307403154935,
+      "calibration": {
+        "raw": {
+          "n": 1424,
+          "accuracy": 0.589185393258427,
+          "chance": 0.5,
+          "lift_over_chance": 0.178370786516854,
+          "nll": 0.6711651357542375,
+          "brier": 0.47657709443123236,
+          "ece": 0.10631908962518029,
+          "mce": 0.1353514335393805,
+          "mean_confidence": 0.6955044828836072,
+          "overconfidence": 0.10631908962518022
+        },
+        "calibrated": {
+          "n": 1424,
+          "accuracy": 0.589185393258427,
+          "chance": 0.5,
+          "lift_over_chance": 0.178370786516854,
+          "nll": 0.6629542552969908,
+          "brier": 0.4706461767947498,
+          "ece": 0.09288904797252366,
+          "mce": 0.12840851959398014,
+          "mean_confidence": 0.6802283964133333,
+          "overconfidence": 0.09104300315490632
+        }
+      },
+      "per_task": {
+        "hemolytic": {
+          "acc": 0.589185393258427,
+          "acc_ci95": 0.025553476939175007,
+          "lift": -0.035814606741572996,
+          "lift_is_significant": false
+        }
+      },
+      "encoder": {
+        "live": false,
+        "arch_version": 1
+      },
+      "mechanism_swap": {
+        "own_prompt_accuracy": 0.589185393258427,
+        "swapped_prompt_accuracy": 0.5912921348314607,
+        "drop": -0.002106741573033699,
+        "drop_is_significant": false,
+        "combined_ci95": 0.05108687556579675,
+        "per_task_own": {
+          "hemolytic": {
+            "acc": 0.589185393258427,
+            "acc_ci95": 0.025553476939175007,
+            "n": 1424
+          }
+        },
+        "per_task_swapped": {
+          "hemolytic": {
+            "acc": 0.5912921348314607,
+            "acc_ci95": 0.025533398626621743,
+            "n": 1424
+          }
+        },
+        "reading": "prompt content is not being used: accuracy survives a prompt from another mechanism family, so the prompt is functioning as a task identifier spelled in English"
+      },
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6832259509229907,
+          "val_loss": 0.6238130331039429,
+          "seconds": 0.2388002872467041
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.6302098345262399,
+          "val_loss": 0.5913418531417847,
+          "seconds": 0.22165489196777344
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.6284593448120077,
+          "val_loss": 0.582992434501648,
+          "seconds": 0.21803689002990723
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.5935427715123627,
+          "val_loss": 0.5958124399185181,
+          "seconds": 0.20904183387756348
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.5694300469956868,
+          "val_loss": 0.5770439505577087,
+          "seconds": 0.20780587196350098
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.5524214337835658,
+          "val_loss": 0.5873703956604004,
+          "seconds": 0.20885992050170898
+        }
+      ]
+    },
+    "entity_only_frozen": {
+      "overall_accuracy": 0.6095505617977528,
+      "temperature": 0.8172564478586445,
+      "calibration": {
+        "raw": {
+          "n": 1424,
+          "accuracy": 0.6095505617977528,
+          "chance": 0.5,
+          "lift_over_chance": 0.2191011235955056,
+          "nll": 0.6521480105433353,
+          "brier": 0.46137335357347586,
+          "ece": 0.04685742139045276,
+          "mce": 0.06881727358033607,
+          "mean_confidence": 0.6540926539485027,
+          "overconfidence": 0.04454209215074989
+        },
+        "calibrated": {
+          "n": 1424,
+          "accuracy": 0.6095505617977528,
+          "chance": 0.5,
+          "lift_over_chance": 0.2191011235955056,
+          "nll": 0.6605048540331928,
+          "brier": 0.4684531863145823,
+          "ece": 0.07325225109863905,
+          "mce": 0.1331011403190459,
+          "mean_confidence": 0.6825117887284803,
+          "overconfidence": 0.07296122693072749
+        }
+      },
+      "per_task": {
+        "hemolytic": {
+          "acc": 0.6095505617977528,
+          "acc_ci95": 0.025338934319040166,
+          "lift": -0.015449438202247201,
+          "lift_is_significant": false
+        }
+      },
+      "encoder": {
+        "live": false,
+        "arch_version": 2
+      },
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6717400032003926,
+          "val_loss": 0.6950560212135315,
+          "seconds": 0.38178205490112305
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.6162329132075137,
+          "val_loss": 0.5805447101593018,
+          "seconds": 0.3456268310546875
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.6081630404131401,
+          "val_loss": 0.5824427604675293,
+          "seconds": 0.3482060432434082
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.5835975362229223,
+          "val_loss": 0.5947813987731934,
+          "seconds": 0.3461127281188965
+        }
+      ]
+    },
+    "task_id_frozen": {
+      "overall_accuracy": 0.5,
+      "temperature": 1.1608566849389348,
+      "calibration": {
+        "raw": {
+          "n": 1424,
+          "accuracy": 0.5,
+          "chance": 0.5,
+          "lift_over_chance": 0.0,
+          "nll": 0.6931471805599453,
+          "brier": 0.5,
+          "ece": 0.0,
+          "mce": 0.0,
+          "mean_confidence": 0.5,
+          "overconfidence": 0.0
+        },
+        "calibrated": {
+          "n": 1424,
+          "accuracy": 0.5,
+          "chance": 0.5,
+          "lift_over_chance": 0.0,
+          "nll": 0.6931471805599453,
+          "brier": 0.5,
+          "ece": 0.0,
+          "mce": 0.0,
+          "mean_confidence": 0.5,
+          "overconfidence": 0.0
+        }
+      },
+      "per_task": {
+        "hemolytic": {
+          "acc": 0.5,
+          "acc_ci95": 0.02596994806015582,
+          "lift": -0.125,
+          "lift_is_significant": true
+        }
+      },
+      "encoder": {
+        "live": false,
+        "arch_version": 2
+      },
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6640187946008277,
+          "val_loss": 0.6884477138519287,
+          "seconds": 0.35749101638793945
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.6216681765768812,
+          "val_loss": 0.6001714468002319,
+          "seconds": 0.348552942276001
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.6240478504507035,
+          "val_loss": 0.5923914313316345,
+          "seconds": 0.3484818935394287
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.5799817790639216,
+          "val_loss": 0.5923284888267517,
+          "seconds": 0.35537123680114746
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.5516705016089227,
+          "val_loss": 0.5620569586753845,
+          "seconds": 0.35295605659484863
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.5238870543828282,
+          "val_loss": 0.5697714686393738,
+          "seconds": 0.369520902633667
+        }
+      ]
+    },
+    "question_only_frozen": {
+      "overall_accuracy": 0.5,
+      "temperature": 8.0,
+      "calibration": {
+        "raw": {
+          "n": 1424,
+          "accuracy": 0.5,
+          "chance": 0.5,
+          "lift_over_chance": 0.0,
+          "nll": 0.6931646470282388,
+          "brier": 0.5000174661632196,
+          "ece": 0.0029551787779806826,
+          "mce": 0.0029551787779806826,
+          "mean_confidence": 0.5029551787779807,
+          "overconfidence": 0.0029551787779806826
+        },
+        "calibrated": {
+          "n": 1424,
+          "accuracy": 0.5,
+          "chance": 0.5,
+          "lift_over_chance": 0.0,
+          "nll": 0.6931474534750767,
+          "brier": 0.5000002729150568,
+          "ece": 0.00036940158143039525,
+          "mce": 0.00036940158143039525,
+          "mean_confidence": 0.5003694015814304,
+          "overconfidence": 0.00036940158143039525
+        }
+      },
+      "per_task": {
+        "hemolytic": {
+          "acc": 0.5,
+          "acc_ci95": 0.02596994806015582,
+          "lift": -0.125,
+          "lift_is_significant": true
+        }
+      },
+      "encoder": {
+        "live": false,
+        "arch_version": 2
+      },
+      "mechanism_swap": {
+        "own_prompt_accuracy": 0.5,
+        "swapped_prompt_accuracy": 0.5,
+        "drop": 0.0,
+        "drop_is_significant": false,
+        "combined_ci95": 0.05193989612031164,
+        "per_task_own": {
+          "hemolytic": {
+            "acc": 0.5,
+            "acc_ci95": 0.02596994806015582,
+            "n": 1424
+          }
+        },
+        "per_task_swapped": {
+          "hemolytic": {
+            "acc": 0.5,
+            "acc_ci95": 0.02596994806015582,
+            "n": 1424
+          }
+        },
+        "reading": "prompt content is not being used: accuracy survives a prompt from another mechanism family, so the prompt is functioning as a task identifier spelled in English"
+      },
+      "training_history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6966795818793341,
+          "val_loss": 0.6988613605499268,
+          "seconds": 0.2996821403503418
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.6987559883088028,
+          "val_loss": 0.6936795711517334,
+          "seconds": 0.32051897048950195
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.6967927294691609,
+          "val_loss": 0.6934042572975159,
+          "seconds": 0.30761218070983887
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.6939288018898643,
+          "val_loss": 0.6939846277236938,
+          "seconds": 0.30784177780151367
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.6947672078646526,
+          "val_loss": 0.6941456198692322,
+          "seconds": 0.32349419593811035
+        }
+      ]
+    }
+  }
+}

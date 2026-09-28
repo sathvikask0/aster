@@ -178,7 +178,8 @@ def main():
                         "'properties' holds out a whole property and every "
                         "negative carries a measured concentration")
     p.add_argument("--held-out-property", default="hemolytic",
-                   help="properties benchmark: which property to hold out")
+                   help="properties benchmark: which property to hold out; "
+                        "'none' runs the in-distribution rung instead")
     p.add_argument("--property-threshold", action="append", default=[],
                    metavar="NAME=UM",
                    help="Override a property's active/inactive cutoff, e.g. "
@@ -255,8 +256,14 @@ def main():
             print(f"  labels disagree on {disagree:,} of {agreement['n']:,} "
                   f"shared peptides ({disagree / agreement['n']:.1%}) -- the "
                   "tasks are distinct, which is the point of this benchmark")
+        held = () if args.held_out_property.lower() in ("none", "") else (
+            args.held_out_property,)
+        if not held:
+            print("  IN-DISTRIBUTION rung: nothing held out, every property "
+                  "supplies train, val and test. This measures whether the model "
+                  "can learn these properties at all; it is not a transfer test.")
         examples, meta = build_property_benchmark(
-            tables, test_tasks=(args.held_out_property,), thresholds=thresholds,
+            tables, test_tasks=held, thresholds=thresholds,
             seed=args.seed, balance_tasks=balance,
             disjoint_sequences=args.disjoint_sequences,
         )
