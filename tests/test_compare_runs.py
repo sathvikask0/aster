@@ -53,3 +53,11 @@ def test_the_stored_v03_reports_are_rejected(tmp_path):
     ok, problems = comparability(runs)
     assert ok == []
     assert len(problems) == len(paths)
+
+
+def test_mixing_frozen_and_trainable_text_is_flagged():
+    a, b = run(), run()
+    a["config"]["text_encoder_trainable"] = False
+    b["config"]["text_encoder_trainable"] = True
+    _, problems = comparability([("protein.json", a), ("both.json", b)])
+    assert any("text_encoder_trainable" in p for p in problems)

@@ -44,7 +44,8 @@ def comparability(runs):
         ok.append((name, run))
 
     if len(ok) > 1:
-        for key in ("negative_policy", "balance_tasks", "esm", "min_samples"):
+        for key in ("negative_policy", "balance_tasks", "esm", "min_samples",
+                    "text_encoder_trainable"):
             values = {name: ok_run["config"].get(key) for name, ok_run in ok}
             if len(set(values.values())) > 1:
                 problems.append(f"differing {key}: {values}")
@@ -116,9 +117,18 @@ def main():
               f"| seed spread {s['accuracy_spread']:.3f}  -> {verdict}")
 
     # Fine-tuning deltas, when a run carries both halves.
+    # Both-towers-live runs answer a different question than protein-only ones.
+    towers = {name: run["config"].get("text_encoder_trainable", False)
+              for name, run in ok}
+    if len(set(towers.values())) > 1:
+        print("\n  ! mixing protein-only and both-towers-live runs. A gain here "
+              "cannot be attributed to either tower; compare them as a ladder "
+              "(frozen -> protein -> both), one step at a time.")
+
     pairs = [("cross_attention_live", "cross_attention_frozen"),
              ("dual_live", "dual_frozen"),
-             ("entity_only_live", "entity_only_frozen")]
+             ("entity_only_live", "entity_only_frozen"),
+             ("question_only_live", "question_only_frozen")]
     deltas = {live: [] for live, _ in pairs}
     for _, run in ok:
         for live, frozen in pairs:
@@ -133,13 +143,17 @@ def main():
             spread = (max(vals) - min(vals)) if len(vals) > 1 else 0.0
             flag = "" if abs(mean) > spread else "  (within seed spread)"
             print(f"  {live:24s} {mean:+.3f} over {len(vals)} run(s), spread {spread:.3f}{flag}")
-        entity = shown.get("entity_only_live")
         hypothesis = shown.get("cross_attention_live") or shown.get("dual_live")
-        if entity and hypothesis:
-            e, h = statistics.fmean(entity), statistics.fmean(hypothesis)
-            if e >= h - 1e-9:
+        if hypothesis:
+            h = statistics.fmean(hypothesis)
+            entity = shown.get("entity_only_live")
+            if entity and statistics.fmean(entity) >= h - 1e-9:
                 print("  ! entity_only gained at least as much as the hypothesis model: "
                       "unfreezing bought peptide classification, not question use.")
+            question = shown.get("question_only_live")
+            if question and statistics.fmean(question) >= h - 1e-9:
+                print("  ! question_only gained at least as much as the hypothesis "
+                      "model: the text tower learned the label prior, not the question.")
 
     # Mechanism swap, aggregated.
     swap_rows = {}

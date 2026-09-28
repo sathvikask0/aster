@@ -124,8 +124,35 @@ trainable encoder weights. A gain with drift near zero is a head effect wearing 
 fine-tuning label. A large drift usually means the encoder was destroyed and the
 head compensated.
 
-The text tower stays frozen here. Unfreezing it as well is a separate
-experiment, and mixing it in would leave neither result attributable.
+### Unfreezing the text tower too
+
+`--unfreeze-text` puts the text encoder in the graph as well:
+
+```bash
+uv run python scripts/run_amp_finetune.py --esm 8M --trainable-blocks 2 \
+    --unfreeze-text --text-trainable-blocks 1 --negative-policy matched
+```
+
+It is a separate flag on purpose. Run it *after* a protein-only run and read the
+two as a ladder — frozen, protein-live, both-live — because if both towers move
+at once and the number goes up, nothing in the report says which one did it.
+`compare_amp_runs.py` warns when you mix the two.
+
+Turning it on adds `question_only_live` to the comparison, and that is the point
+rather than a side effect: `question_only` is the control for "answers from the
+prompt alone", so giving the hypothesis model trainable text blocks while denying
+them to that control inflates the hypothesis by exactly the withheld capacity —
+the same argument that puts a live protein encoder in `entity_only`. If
+`question_only_live` gains as much, the text tower learned the label prior, not
+the question. Drift is reported per tower, so a run where only one moved is
+visible rather than inferred.
+
+The cost is small: there is one question per task and two answer strings in the
+whole benchmark, so a step forwards about 23 short sequences and gathers per row
+instead of forwarding a sequence per row. With text live, the batch carries
+question and answer *indices* rather than cached vectors, since a cached vector
+cannot carry a gradient — the mechanism-swap ablation swaps the index instead,
+and there is a test for that path.
 
 ## Does the prompt work as biology, or as a name?
 

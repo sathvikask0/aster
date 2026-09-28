@@ -16,7 +16,7 @@ from transformers import EsmConfig, EsmModel
 
 from aster.model import blocks
 from aster.real.finetune import (
-    LiveEntityAster, encoder_drift, param_groups, snapshot_encoder, trainable_report,
+    LiveAster, encoder_drift, param_groups, snapshot_encoder, trainable_report,
 )
 from aster.real.models import CrossAttentionAster, RealAster
 
@@ -42,7 +42,7 @@ def live(mode="dual", cls=CrossAttentionAster, trainable_blocks=2):
     enc = encoder(trainable_blocks)
     head = cls(HIDDEN, D_TEXT, N_TASKS, h=32, mode=mode) if cls is CrossAttentionAster \
         else cls(HIDDEN, D_TEXT, N_TASKS, h=32, mode=mode)
-    return LiveEntityAster(head, enc)
+    return LiveAster(head, enc)
 
 
 def batch(b=6, k=2, seed=0, length=12):
@@ -216,3 +216,132 @@ def test_runner_train_loop_fits_a_tiny_problem():
     loss_before = torch.nn.functional.cross_entropy(torch.from_numpy(before), va["y"])
     loss_after = torch.nn.functional.cross_entropy(torch.from_numpy(after), va["y"])
     assert loss_after < loss_before
+
+
+# --- the text tower, when it is also live ----------------------------------
+
+def text_encoder(trainable_blocks=1):
+    from transformers import BertConfig, BertModel
+
+    from aster.model import unfreeze_suffix
+
+    cfg = BertConfig(vocab_size=40, hidden_size=D_TEXT, num_hidden_layers=2,
+                     num_attention_heads=2, intermediate_size=32,
+                     max_position_embeddings=64)
+    enc = BertModel(cfg, add_pooling_layer=False)
+    if trainable_blocks:
+        unfreeze_suffix(enc, trainable_blocks)
+    return enc
+
+
+def text_tables(n_questions=4, n_answers=2, length=6):
+    from aster.real.finetune import TextTable
+
+    g = torch.Generator().manual_seed(11)
+    def table(n):
+        ids = torch.randint(4, 40, (n, length), generator=g)
+        mask = torch.ones(n, length, dtype=torch.long)
+        return TextTable(ids, mask)
+    return table(n_questions), table(n_answers)
+
+
+def live_text(mode="dual", trainable_blocks=1, text_blocks=1):
+    from aster.real.finetune import LiveAster
+
+    q, a = text_tables()
+    head = CrossAttentionAster(HIDDEN, D_TEXT, N_TASKS, h=32, mode=mode)
+    return LiveAster(head, encoder(trainable_blocks),
+                     text_encoder=text_encoder(text_blocks), questions=q, answers=a)
+
+
+def index_batch(b=6, k=2, seed=0, length=12, n_questions=4, n_answers=2):
+    base = batch(b=b, k=k, seed=seed, length=length)
+    g = torch.Generator().manual_seed(seed + 1)
+    base["q_idx"] = torch.randint(0, n_questions, (b,), generator=g)
+    base["a_idx"] = torch.stack([torch.arange(k) % n_answers for _ in range(b)])
+    return base
+
+
+def test_a_live_text_encoder_requires_its_tables():
+    from aster.real.finetune import LiveAster
+
+    with pytest.raises(ValueError, match="question and answer tables"):
+        LiveAster(CrossAttentionAster(HIDDEN, D_TEXT, N_TASKS, h=32),
+                  encoder(1), text_encoder=text_encoder(1))
+
+
+def test_live_text_refuses_cached_embeddings():
+    model = live_text()
+    b = batch()  # carries q_emb/a_emb but no q_idx/a_idx
+    with pytest.raises(KeyError, match="cannot carry gradients"):
+        model(b)
+
+
+def test_cached_question_embeddings_are_ignored_once_text_is_live():
+    model = live_text().eval()
+    b = index_batch()
+    with torch.no_grad():
+        base = model(b)
+        # Poisoning the cached vectors must change nothing: they are unused now.
+        other = model({**b, "q_emb": torch.randn_like(b["q_emb"]) * 50,
+                       "a_emb": torch.randn_like(b["a_emb"]) * 50})
+    assert torch.allclose(base, other)
+
+
+def test_the_question_index_does_change_the_score():
+    model = live_text().eval()
+    b = index_batch()
+    with torch.no_grad():
+        base = model(b)
+        moved = model({**b, "q_idx": (b["q_idx"] + 1) % 4})
+    assert not torch.allclose(base, moved)
+
+
+def test_only_the_last_text_blocks_receive_gradients():
+    model = live_text(text_blocks=1)
+    layers = blocks(model.text_encoder)
+    b = index_batch()
+    torch.nn.functional.cross_entropy(model(b), b["y"]).backward()
+
+    assert all(p.grad is None or p.grad.abs().sum() == 0
+               for p in layers[0].parameters())
+    assert any(p.grad is not None and p.grad.abs().sum() > 0
+               for p in layers[-1].parameters())
+    assert model.text_encoder.embeddings.word_embeddings.weight.grad is None
+
+
+def test_both_towers_move_and_are_reported_separately():
+    model = live_text(trainable_blocks=1, text_blocks=1)
+    protein_before = snapshot_encoder(model)
+    text_before = snapshot_encoder(model, "text_encoder")
+    opt = torch.optim.AdamW(param_groups(model, head_lr=1e-2, encoder_lr=1e-3,
+                                         text_lr=1e-3))
+    for step in range(3):
+        b = index_batch(seed=step)
+        torch.nn.functional.cross_entropy(model(b), b["y"]).backward()
+        opt.step()
+        opt.zero_grad()
+
+    assert encoder_drift(model, protein_before) > 0
+    assert encoder_drift(model, text_before, "text_encoder") > 0
+
+
+def test_param_groups_gives_the_text_tower_its_own_rate():
+    model = live_text()
+    groups = param_groups(model, head_lr=1e-3, encoder_lr=2e-5, text_lr=5e-6)
+    assert [g["lr"] for g in groups] == [1e-3, 2e-5, 5e-6]
+    ids = [{id(p) for p in g["params"]} for g in groups]
+    assert not ids[0] & ids[1] and not ids[0] & ids[2] and not ids[1] & ids[2]
+
+
+def test_text_lr_defaults_to_the_encoder_rate():
+    model = live_text()
+    groups = param_groups(model, head_lr=1e-3, encoder_lr=2e-5)
+    assert [g["lr"] for g in groups] == [1e-3, 2e-5, 2e-5]
+
+
+def test_protein_only_model_reports_no_text_drift():
+    model = live()
+    assert model.text_is_live is False
+    assert snapshot_encoder(model, "text_encoder") == {}
+    assert encoder_drift(model, {}, "text_encoder") == 0.0

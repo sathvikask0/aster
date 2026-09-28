@@ -42,8 +42,9 @@ from aster.real.evaluate import (
     REPORTING_RULE, build_tensor_dict, evaluate, mechanism_swap, print_result,
 )
 from aster.real.finetune import (
-    LiveEntityAster, encoder_drift, load_protein_encoder, param_groups,
-    snapshot_encoder, tokenize_sequences, trainable_report,
+    LIVE_TEXT_MODES, LiveAster, TextTable, encoder_drift, load_protein_encoder,
+    load_text_encoder, param_groups, snapshot_encoder, tokenize_sequences,
+    trainable_report,
 )
 from aster.real.models import CrossAttentionAster, RealAster
 
@@ -75,11 +76,12 @@ def forward_all(model, tensors, bs, device):
     return torch.cat(chunks).numpy()
 
 
-def train(model, tr, va, device, epochs, bs, head_lr, encoder_lr, clip=1.0,
-          seed=42, patience=2, label=""):
+def train(model, tr, va, device, epochs, bs, head_lr, encoder_lr, text_lr=None,
+          clip=1.0, seed=42, patience=2, label=""):
     torch.manual_seed(seed)
     gen = torch.Generator().manual_seed(seed)
-    opt = torch.optim.AdamW(param_groups(model, head_lr=head_lr, encoder_lr=encoder_lr))
+    opt = torch.optim.AdamW(param_groups(
+        model, head_lr=head_lr, encoder_lr=encoder_lr, text_lr=text_lr))
     n = tr["y"].shape[0]
     steps = epochs * ((n + bs - 1) // bs) + 10
     sched = torch.optim.lr_scheduler.OneCycleLR(
@@ -135,6 +137,13 @@ def main():
                    help="Smaller than the frozen path: the encoder is in the graph now")
     p.add_argument("--head-lr", type=float, default=1e-3)
     p.add_argument("--encoder-lr", type=float, default=2e-5)
+    p.add_argument("--unfreeze-text", action="store_true",
+                   help="Also put the text encoder in the graph. Run this AFTER a "
+                        "protein-only run: if both towers move at once and the "
+                        "number goes up, nothing says which one did it.")
+    p.add_argument("--text-trainable-blocks", type=int, default=1)
+    p.add_argument("--text-lr", type=float, default=None,
+                   help="Defaults to --encoder-lr")
     p.add_argument("--max-len", type=int, default=64)
     p.add_argument("--max-peptides", type=int, default=None)
     p.add_argument("--negative-policy", default="matched",
@@ -152,8 +161,15 @@ def main():
 
     device = pick_device(args.device)
     balance = not args.no_balance_tasks
+    text_note = (f"text: last {args.text_trainable_blocks} blocks trainable"
+                 if args.unfreeze_text else "text: frozen")
     print(f"AMP fine-tune | ESM-2 {args.esm} | last {args.trainable_blocks} blocks "
-          f"trainable | policy={args.negative_policy} | balance={balance} | {device}")
+          f"trainable | {text_note} | policy={args.negative_policy} | "
+          f"balance={balance} | {device}")
+    if args.unfreeze_text:
+        print("  NOTE both towers are live in this run. Compare it against a "
+              "protein-only run, not against the frozen reference alone, or the "
+              "gain cannot be attributed to either tower.")
 
     examples, meta = load_amp_benchmark(
         min_samples=MIN_SAMPLES, seed=args.seed,
@@ -243,40 +259,102 @@ def main():
     }
     d_entity = encoder.config.hidden_size
 
+    # A live text tower needs indices rather than vectors: cached embeddings
+    # cannot carry a gradient. There is one question per task and two answer
+    # strings in the whole benchmark, so a step forwards ~23 short sequences.
+    question_order = sorted(meta)
+    text_tables, text_report = None, None
+    if args.unfreeze_text:
+        _, text_tok = load_text_encoder(TEXT_MODEL, args.text_trainable_blocks, device)
+        q_ids, q_mask = tokenize_sequences(
+            [questions[t] for t in question_order], text_tok, max_len=64)
+        answer_order = sorted({o for t in meta for o in meta[t]["options"][:2]})
+        a_ids, a_mask = tokenize_sequences(answer_order, text_tok, max_len=64)
+        text_tables = {
+            "questions": TextTable(q_ids, q_mask),
+            "answers": TextTable(a_ids, a_mask),
+            "question_order": question_order,
+            "answer_order": answer_order,
+        }
+        q_pos = {t: i for i, t in enumerate(question_order)}
+        a_pos = {txt: i for i, txt in enumerate(answer_order)}
+        for split, rows in (("train", train_ex), ("val", val_ex), ("test", test_ex)):
+            live_tensors[split]["q_idx"] = torch.tensor(
+                [q_pos[r.task] for r in rows], dtype=torch.long, device=device)
+            live_tensors[split]["a_idx"] = torch.tensor(
+                [[a_pos[meta[r.task]["options"][k]] for k in (0, 1)] for r in rows],
+                dtype=torch.long, device=device)
+        probe, _ = load_text_encoder(TEXT_MODEL, args.text_trainable_blocks, device)
+        text_report = trainable_report(probe)
+        print(f"Text encoder: {text_report['trainable_params']:,} of "
+              f"{text_report['total_params']:,} params trainable "
+              f"({text_report['trainable_fraction']:.1%})")
+        del probe
+
     live_models = [
         ("cross_attention_live", CrossAttentionAster, "dual"),
         ("dual_live", RealAster, "dual"),
         ("entity_only_live", CrossAttentionAster, "entity_only"),
     ]
+    if args.unfreeze_text:
+        # The mirror of entity_only on the text side: the control for "answers
+        # from the prompt alone" must get the same trainable text blocks the
+        # hypothesis model gets, or the comparison is rigged in its favour.
+        live_models.append(("question_only_live", CrossAttentionAster, "question_only"))
     print("\n--- Fine-tuned (live encoder) ---")
     for name, cls, mode in live_models:
         print(f"\n  training {name} (mode={mode})")
         torch.manual_seed(args.seed)
         head = cls(d_entity, d_text, len(train_tasks), mode=mode)
         enc, _ = load_protein_encoder(args.esm, args.trainable_blocks, device)
-        model = LiveEntityAster(head, enc).to(device)
+        text_enc = None
+        if args.unfreeze_text and mode in LIVE_TEXT_MODES:
+            text_enc, _ = load_text_encoder(
+                TEXT_MODEL, args.text_trainable_blocks, device)
+        model = LiveAster(
+            head, enc, text_encoder=text_enc,
+            questions=text_tables["questions"] if text_enc is not None else None,
+            answers=text_tables["answers"] if text_enc is not None else None,
+        ).to(device)
         before = snapshot_encoder(model)
+        text_before = snapshot_encoder(model, "text_encoder")
         model = train(model, live_tensors["train"], live_tensors["val"], device,
                       epochs=args.epochs, bs=args.batch_size, head_lr=args.head_lr,
-                      encoder_lr=args.encoder_lr, seed=args.seed, label=name)
+                      encoder_lr=args.encoder_lr, text_lr=args.text_lr,
+                      seed=args.seed, label=name)
         drift = encoder_drift(model, before)
+        text_drift = encoder_drift(model, text_before, "text_encoder")
         res = evaluate(
             forward_all(model, live_tensors["test"], args.batch_size, device),
             forward_all(model, live_tensors["val"], args.batch_size, device),
             y_test, y_val, test_ex, held_out_tasks, ceilings,
         )
         res["encoder_drift"] = drift
-        res["encoder"] = {"live": True, "arch_version": getattr(cls, "ARCH_VERSION", 1)}
+        res["text_encoder_drift"] = text_drift
+        res["encoder"] = {
+            "live": True,
+            "text_live": model.text_is_live,
+            "arch_version": getattr(cls, "ARCH_VERSION", 1),
+        }
         if mode != "entity_only":
-            res["mechanism_swap"] = mechanism_swap(
-                model, live_tensors["test"],
+            swapped = (
+                ablation.swapped_index_tensor(
+                    live_tensors["test"], test_ex,
+                    text_tables["question_order"], swap, device)
+                if model.text_is_live else
                 ablation.swapped_question_tensor(
-                    live_tensors["test"], test_ex, q_map, swap, device),
+                    live_tensors["test"], test_ex, q_map, swap, device)
+            )
+            res["mechanism_swap"] = mechanism_swap(
+                model, live_tensors["test"], swapped,
                 test_ex, y_test, held_out_tasks,
                 lambda m, t: forward_all(m, t, args.batch_size, device), ablation,
             )
         results[name] = res
-        print_result(name, res, held_out_tasks, extra=f" | drift={drift:.2e}")
+        extra = f" | drift={drift:.2e}"
+        if model.text_is_live:
+            extra += f" | text drift={text_drift:.2e}"
+        print_result(name, res, held_out_tasks, extra=extra)
         if "mechanism_swap" in res:
             ms = res["mechanism_swap"]
             print(f"    mechanism swap: {ms['own_prompt_accuracy']:.3f} -> "
@@ -285,6 +363,8 @@ def main():
             print(f"      {ms['reading']}")
         if drift < 1e-8:
             print("    WARN encoder did not move. This is not a fine-tuning result.")
+        if model.text_is_live and text_drift < 1e-8:
+            print("    WARN text encoder did not move despite --unfreeze-text.")
         del model, enc
         if device == "mps":
             torch.mps.empty_cache()
@@ -365,7 +445,12 @@ def main():
                 "negative_policy": args.negative_policy,
                 "balance_tasks": balance,
                 "text_encoder": TEXT_MODEL,
-                "text_encoder_trainable": False,
+                "text_encoder_trainable": bool(args.unfreeze_text),
+                "text_trainable_blocks": args.text_trainable_blocks if args.unfreeze_text else 0,
+                "text_lr": (args.text_lr if args.text_lr is not None else args.encoder_lr)
+                           if args.unfreeze_text else None,
+                "text_encoder_trainable_report": text_report,
+                "live_text_modes": list(LIVE_TEXT_MODES) if args.unfreeze_text else [],
                 "label_semantics_version": LABEL_SEMANTICS_VERSION,
                 "frozen_reference_included": not args.skip_frozen_reference,
                 "n_train": len(train_ex),

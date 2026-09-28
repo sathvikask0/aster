@@ -86,3 +86,21 @@ def read_swap(own_acc: float, swapped_acc: float, ci: float) -> str:
         "accuracy IMPROVED with a wrong-family prompt, which no version of the "
         "hypothesis predicts; suspect the prompt is acting as a label-prior knob"
     )
+
+
+def swapped_index_tensor(tensors, examples, question_order, mapping, device):
+    """Swap by question *index*, for a live text encoder.
+
+    With the text tower in the graph the batch carries q_idx rather than a
+    precomputed q_emb, so the swap has to move the index. Same assignment, same
+    reading; only the plumbing differs.
+    """
+    import torch
+
+    if "q_idx" not in tensors:
+        raise KeyError("swapped_index_tensor needs q_idx; use swapped_question_tensor")
+    position = {task: i for i, task in enumerate(question_order)}
+    rows = [position[mapping.get(e.task, e.task)] for e in examples]
+    swapped = dict(tensors)
+    swapped["q_idx"] = torch.tensor(rows, dtype=torch.long, device=device)
+    return swapped

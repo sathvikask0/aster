@@ -110,15 +110,12 @@ def test_frozen_runner_writes_a_readable_report(monkeypatch, amp_data, tmp_path)
     assert "per_task_own" in report["results"]["question_only"]["mechanism_swap"]
 
 
-def test_finetune_runner_runs_with_a_stub_encoder(monkeypatch, amp_data, tmp_path):
-    """The live path, minus the download: a tiny random ESM of the same class."""
+def _stubs(monkeypatch, runner):
+    """Tiny random encoders of the right classes, so no weights are downloaded."""
     import torch
-    from transformers import EsmConfig, EsmModel
+    from transformers import BertConfig, BertModel, EsmConfig, EsmModel
 
-    import scripts.run_amp_finetune as runner
     from aster.model import unfreeze_suffix
-
-    _patch(monkeypatch, runner, amp_data)
 
     class StubTokenizer:
         def __call__(self, seqs, return_tensors=None, padding=None, truncation=None,
@@ -126,12 +123,12 @@ def test_finetune_runner_runs_with_a_stub_encoder(monkeypatch, amp_data, tmp_pat
             ids = torch.ones(len(seqs), max_length, dtype=torch.long)
             mask = torch.zeros(len(seqs), max_length, dtype=torch.long)
             for i, s in enumerate(seqs):
-                n = min(len(s), max_length)
+                n = max(1, min(len(s), max_length))
                 ids[i, :n] = torch.tensor([4 + (ord(c) % 20) for c in s[:n]])
                 mask[i, :n] = 1
             return {"input_ids": ids, "attention_mask": mask}
 
-    def stub_encoder(model="8M", trainable_blocks=2, device="cpu", revision=None):
+    def stub_protein(model="8M", trainable_blocks=2, device="cpu", revision=None):
         cfg = EsmConfig(
             vocab_size=33, hidden_size=32, num_hidden_layers=2, num_attention_heads=2,
             intermediate_size=64, max_position_embeddings=64, pad_token_id=1,
@@ -142,7 +139,29 @@ def test_finetune_runner_runs_with_a_stub_encoder(monkeypatch, amp_data, tmp_pat
             unfreeze_suffix(enc, min(trainable_blocks, 2))
         return enc.to(device), StubTokenizer()
 
-    monkeypatch.setattr(runner, "load_protein_encoder", stub_encoder)
+    def stub_text(model, trainable_blocks=1, device="cpu", revision=None):
+        cfg = BertConfig(vocab_size=40, hidden_size=D_TEXT, num_hidden_layers=2,
+                         num_attention_heads=2, intermediate_size=32,
+                         max_position_embeddings=128)
+        enc = BertModel(cfg, add_pooling_layer=False)
+        if trainable_blocks:
+            unfreeze_suffix(enc, min(trainable_blocks, 2))
+        return enc.to(device), StubTokenizer()
+
+    monkeypatch.setattr(runner, "load_protein_encoder", stub_protein)
+    monkeypatch.setattr(runner, "load_text_encoder", stub_text)
+
+
+def test_finetune_runner_runs_with_a_stub_encoder(monkeypatch, amp_data, tmp_path):
+    """The live path, minus the download: a tiny random ESM of the same class."""
+    import torch
+    from transformers import EsmConfig, EsmModel
+
+    import scripts.run_amp_finetune as runner
+    from aster.model import unfreeze_suffix
+
+    _patch(monkeypatch, runner, amp_data)
+    _stubs(monkeypatch, runner)
 
     out = tmp_path / "finetune.json"
     monkeypatch.setattr(sys, "argv", [
@@ -167,3 +186,50 @@ def test_finetune_runner_runs_with_a_stub_encoder(monkeypatch, amp_data, tmp_pat
     # The control must not be handed the question, even here.
     assert "mechanism_swap" not in report["results"]["entity_only_live"]
     assert report["results"]["cross_attention_live"]["mechanism_swap"]["reading"]
+
+
+def test_unfreeze_text_puts_both_towers_in_the_graph(monkeypatch, amp_data, tmp_path):
+    """Both-towers-live: the control on the text side must appear, and the
+    mechanism swap must still work when the question is an index, not a vector."""
+    import scripts.run_amp_finetune as runner
+
+    _patch(monkeypatch, runner, amp_data)
+    _stubs(monkeypatch, runner)
+
+    out = tmp_path / "both.json"
+    monkeypatch.setattr(sys, "argv", [
+        "run_amp_finetune.py", "--epochs", "1", "--batch-size", "16",
+        "--trainable-blocks", "1", "--max-len", "32", "--device", "cpu",
+        "--unfreeze-text", "--text-trainable-blocks", "1", "--text-lr", "1e-4",
+        "--skip-frozen-reference", "--out", str(out),
+    ])
+    runner.main()
+
+    report = json.loads(out.read_text())
+    cfg = report["config"]
+    assert cfg["text_encoder_trainable"] is True
+    assert cfg["text_trainable_blocks"] == 1
+    assert cfg["text_lr"] == pytest.approx(1e-4)
+    assert cfg["text_encoder_trainable_report"]["trainable_params"] > 0
+    assert set(cfg["live_text_modes"]) == {"dual", "question_only"}
+
+    # The text-side control must exist, or the hypothesis model is compared
+    # against a text tower that was denied the same capacity.
+    assert "question_only_live" in report["results"]
+
+    text_live = {n: r["encoder"]["text_live"] for n, r in report["results"].items()}
+    assert text_live["cross_attention_live"] is True
+    assert text_live["dual_live"] is True
+    assert text_live["question_only_live"] is True
+    assert text_live["entity_only_live"] is False, "entity_only reads no text"
+
+    # Both towers must have moved, and be reported apart.
+    hyp = report["results"]["cross_attention_live"]
+    assert hyp["encoder_drift"] > 0
+    assert hyp["text_encoder_drift"] > 0
+    assert report["results"]["entity_only_live"]["text_encoder_drift"] == 0
+
+    # The swap goes through q_idx on this path; it must still produce a reading.
+    ms = hyp["mechanism_swap"]
+    assert ms["reading"]
+    assert 0.0 <= ms["swapped_prompt_accuracy"] <= 1.0
