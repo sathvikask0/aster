@@ -26,8 +26,7 @@
     <article>
       <h1>Breaking the Rank-3 Trap: what v0.2 fixed, and what it didn't</h1>
       <p><strong>September 2026 · Aster v0.2</strong></p>
-      <pre><code>python scripts/run_amp_multitask.py --esm 8M --max-peptides 4000
-      python scripts/recompute_ceilings.py reports/amp_multitask_results.json</code></pre>
+      <pre><code>python scripts/run_amp_multitask.py --esm 8M --max-peptides 4000</code></pre>
       <div class="callout"><strong>Correction (27 September 2026).</strong> The first version of this report headlined "+0.054 over the lookup floor" and called it positive transfer. That is the wrong zero. The control rig's own reading rule says the shortcut ceiling is the real zero, and the ceiling here was additionally computed <em>in sample</em> — fitted on the same rows it scored. Both are fixed below: the ceiling is now an out-of-fold probe, and every claim is a margin over it. The verdict changes from "resolution" to "half a resolution."</div>
       <hr />
       <h2>1. Context: the flaw v0.2 set out to fix</h2>

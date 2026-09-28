@@ -142,6 +142,13 @@
               <td>The v0.2 ceilings were fitted in sample, inflating them by 0.012&ndash;0.039. Now scored out of fold, in one shared module.</td>
             </tr>
             <tr>
+              <td class="model-name">AMP answer-label semantics</td>
+              <td><span class="exp-tag tag-finding">Correction</span></td>
+              <td>
+                The AMP loader labelled rows by activity (1 = reported active) but placed the active answer at option index 0, and cross-entropy reads those labels as option indices &mdash; so every answer-reading model was trained to prefer the wrong answer text. Answers now follow the labels, runs record <code>label_semantics_version</code>, and regression tests trace source activity through the training tensors under all three negative policies with balancing on and off. No stored AMP report carries that field, so <strong>no published AMP number survives as evidence about answer semantics.</strong>
+              </td>
+            </tr>
+            <tr>
               <td class="model-name">Audit of the controls themselves</td>
               <td><span class="exp-tag tag-wrong">Two were broken</span></td>
               <td>
@@ -160,7 +167,9 @@
         In progress &middot; Aster v0.3
       </div>
       <h2>Make the shortcut impossible, then see what's left</h2>
-      <p class="section-desc">Design frozen &middot; pre-check run &middot; model comparison pending</p>
+      <p class="section-desc">Design frozen &middot; pre-check run &middot; model comparison to be re-run</p>
+
+      <div class="callout"><strong>Correction, 28 September 2026.</strong> The v0.3 model comparison was run, but the AMP loader had the active answer at option index 0 while the labels said 1 = active, so cross-entropy rewarded the opposite answer text. Every model that reads answers was trained against inverted options. Those runs are kept in <code>reports/</code> as history and are not results; the comparison has to be repeated under label semantics v2. The pre-registered outcomes below are still open.</div>
 
       <p>
         Every number on this site is measured against a ceiling high enough to swallow the effect being measured: positives are real antimicrobial peptides, negatives are peptides with no record, and the two pools differ in bulk composition. So <em>&ldquo;is this peptide cationic and amphipathic?&rdquo;</em> answers most of the benchmark without reading the question &mdash; on <em>C. albicans</em>, to 0.721.
@@ -248,16 +257,6 @@
       <div class="code-box">
         <span id="cmd-amp">python scripts/run_amp_multitask.py --esm 8M --max-peptides 4000</span>
         <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('cmd-amp').innerText); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 2000)">Copy</button>
-      </div>
-
-      <div class="code-box">
-        <span id="cmd-real">python scripts/run_peptiverse.py --root ~/peptiverse --esm 8M</span>
-        <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('cmd-real').innerText); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 2000)">Copy</button>
-      </div>
-
-      <div class="code-box">
-        <span id="cmd-ceil">python scripts/recompute_ceilings.py reports/amp_multitask_results.json</span>
-        <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('cmd-ceil').innerText); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 2000)">Copy</button>
       </div>
 
       <div class="code-box">

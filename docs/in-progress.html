@@ -26,7 +26,7 @@
     <article>
       <h1>In progress: make the shortcut impossible, then see what's left</h1>
       <p><strong>Aster v0.3 · design frozen 27 September 2026 · run pending</strong></p>
-      <p>Status: the data construction and the pre-check below have run. The model comparison has not — it needs ESM-2 embeddings, and the machine this was prepared on has no access to the weights. Nothing here is a result yet.</p>
+      <p>Status: the data construction and the pre-check below have run. The model comparison has been <em>executed</em> (<code>reports/amp_v03_random.json</code>, <code>amp_v03_random_balanced.json</code>, <code>amp_v03_matched_balanced.json</code>) but those runs are <strong>not results</strong>: they predate the 28 September answer-label correction, so every model that reads answer text was trained against inverted option indices. They are kept as history only. The pre-registered outcomes below are still open, and the run has to be repeated under label semantics v2.</p>
       <hr />
       <h2>The question this experiment exists to answer</h2>
       <p>v0.2 established two things that point in opposite directions. The text encoder stopped being a lookup table (+0.054 over <code>task_id</code>). And against the shortcut ceiling, the honest zero, the mean lift was <strong>−0.058</strong>, with 4 of 5 held-out targets below a 20-dimensional bag of amino acids.</p>
@@ -43,8 +43,8 @@
       <p>Held-out composition ceilings, out of fold, under each negative policy:</p>
       <div class="table-wrapper"><table><thead><tr><th>Held-out target</th><th><code>random</code> (v0.2)</th><th><code>covered</code></th><th><code>matched</code></th></tr></thead><tbody><tr><td><em>C. albicans</em></td><td>0.721</td><td>0.750</td><td><strong>0.522</strong></td></tr><tr><td><em>S. epidermidis</em></td><td>0.602</td><td>0.605</td><td><strong>0.513</strong></td></tr><tr><td><em>B. cereus</em></td><td>0.575</td><td>0.588</td><td><strong>0.540</strong></td></tr><tr><td><em>K. pneumoniae</em></td><td>0.554</td><td>0.557</td><td><strong>0.531</strong></td></tr><tr><td><em>S. typhimurium</em></td><td>0.549</td><td>0.553</td><td><strong>0.517</strong></td></tr></tbody></table></div>
       <p>The shortcut is gone. Note that <code>covered</code> alone <em>raises</em> the ceiling slightly — restricting negatives to well-assayed peptides does not make the classes compositionally similar, which is worth knowing before anyone reaches for it as a fix on its own.</p>
-      <pre><code>python scripts/recompute_ceilings.py reports/amp_multitask_results.json \
-          --negative-policy matched</code></pre>
+      <pre><code>python scripts/run_amp_multitask.py --esm 8M --max-peptides 4000 \
+          --negative-policy matched --balance-tasks</code></pre>
       <hr />
       <h2>Pre-registered outcomes</h2>
       <p>Written before the run, so the result cannot be re-read into a success.</p>

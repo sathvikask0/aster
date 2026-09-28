@@ -41,7 +41,7 @@ logit_i = dot(normalize(q), normalize(v_i)) / temperature
 choice probabilities = softmax(logits)
 ```
 
-The default compact configuration uses ESM-2 8M and BERT-tiny for integration tests. The last two ESM blocks and last text block are trainable. `configs/research.json` specifies ESM-2 650M and ModernBERT-large, with their last three blocks trainable; that larger configuration has not yet been run here. The cell MLP, projections and temperature are trainable. Encoder outputs are recomputed during training; only tokenization is cached.
+The default compact configuration uses ESM-2 8M and BERT-tiny for integration tests. The last two ESM blocks and last text block are trainable. Larger encoders (ESM-2 650M, ModernBERT-large) have not been run here, so no configuration for them is checked in. The cell MLP, projections and temperature are trainable. Encoder outputs are recomputed during training; only tokenization is cached.
 
 Independent branches can be batched or run concurrently at inference. No latency claim has been measured. Softmax is a distribution over supplied choices, not automatically a calibrated biological probability. A future abstention rule must be validated under distribution shift; entropy alone is not evidence that a model knows when it is wrong.
 
@@ -85,7 +85,6 @@ rows. A lift smaller than the combined 95% intervals is not a result.
 
 ```bash
 uv run python scripts/run_amp_multitask.py --esm 8M --max-peptides 4000
-uv run python scripts/recompute_ceilings.py reports/amp_multitask_results.json
 ```
 
 Negatives in the AMP benchmark are **presumed, not measured**: the source tables
@@ -99,8 +98,6 @@ ceiling to chance).
 
 ```bash
 uv run python scripts/train.py data/experimental_rows.jsonl --out checkpoints/experiment
-# Larger, not yet validated configuration:
-uv run python scripts/train.py data/experimental_rows.jsonl --config configs/research.json
 ```
 
 Supply JSONL records with:
