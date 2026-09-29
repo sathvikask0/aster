@@ -224,7 +224,7 @@
           <div class="exp-header">
             <span class="exp-num">04</span>
             <span class="exp-tag tag-wrong">Mine</span>
-            <span class="exp-title">The effect did not survive the fix, or five more seeds</span>
+            <span class="exp-title">The effect did not survive the fix, five more seeds, or real training</span>
           </div>
           <div class="exp-body">
             With selection corrected, everything was re-run. Every control's AUROC rose, because AUROC is now
@@ -249,9 +249,81 @@
             So the question channel contributes nothing measurable, and finding 02 was my own version of the
             same mistake as finding 01: a number that looked like a result because the comparison had not
             been made hard enough yet.
+            <br><br>
+            <strong>Two further checks, because "nothing measurable" is a weak claim to stop on.</strong>
+            First, the assay questions are not a degenerate representation that an interaction term could
+            never use: their MiniLM embeddings have an effective rank of <span class="num">39.8</span> over
+            552 questions, so there is real structure in the text. Second, the runs above trained for only
+            <span class="num">1.7</span> passes over the data and peaked inside the first, which looked like
+            it might explain everything &mdash; so they were retrained with twelve times the budget. It was
+            not undertraining. Training loss halves, from <span class="num">0.232</span> to
+            <span class="num">0.124</span>, while held-out AUROC <em>falls</em>; the model overfits the
+            training assays within one pass. And trained properly the comparison inverts:
+            <span class="model-name">question</span> lands <strong class="num">&minus;0.0055</strong>
+            <em>below</em> <span class="model-name">entity_only</span>, so reading the question is worse than
+            ignoring it.
+            <br><br>
+            The clinching number is the one against <span class="model-name">task_id</span>, a control that
+            gets a learned embedding per training assay and a <strong>zero vector</strong> for every unseen
+            one, and so cannot transfer by construction. Its training curve tracks
+            <span class="model-name">question</span>'s almost exactly (<span class="num">0.108</span> against
+            <span class="num">0.121</span> final training loss) and its held-out score is the same to within
+            noise: <strong class="num">&minus;0.0005 &plusmn; 0.0063</strong>. An English description of an
+            assay mechanism is worth what a blank vector is worth. The model is using the question as a
+            lookup key, not as meaning &mdash; which is a sharper statement of the failure than the
+            null was, and the one to design the next attempt against.
           </div>
         </div>
       </div>
+
+      <h2>The test that isolates comprehension</h2>
+      <p class="section-desc">
+        Every comparison above ranks molecules within an assay, and that is the direction a molecule-level
+        promiscuity prior owns: a compound active in 400 assays is a good bet in the 401st, so
+        <span class="model-name">entity_only</span> reaches <span class="num">0.670</span> without reading a
+        word. Transposing the comparison removes that prior by construction. Fix one molecule and rank the
+        held-out <em>assays</em> for it: <span class="model-name">entity_only</span> emits a single number for
+        every assay, so all of them tie and its AUROC is exactly <span class="num">0.5</span> &mdash; not
+        empirically, structurally. Verified: 830 of 833 molecules get bit-identical predictions across every
+        assay, the largest spread being <span class="num">3&times;10<sup>&minus;8</sup></span>, below float32
+        epsilon.
+      </p>
+      <p class="section-desc">
+        The confound transposes with the axis, though, which is the part worth stating plainly. In this
+        direction the strong control becomes <span class="model-name">question_only</span>: it predicts an
+        assay's prevalence from its text, and a molecule really is likelier to be active in a high-prevalence
+        assay. Beating it requires a genuine molecule-by-assay interaction, which is the thing in doubt.
+      </p>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Direction</th><th>Control isolating one marginal</th><th>Control</th>
+              <th><span class="model-name">question</span></th><th>Difference</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Rank molecules in an assay</td><td><span class="model-name">entity_only</span>, molecule propensity</td>
+              <td class="num">0.6700</td><td class="num">0.6758</td>
+              <td class="num">+0.0058, <em>p</em> = 0.25</td>
+            </tr>
+            <tr>
+              <td>Rank assays for a molecule</td><td><span class="model-name">question_only</span>, assay prevalence</td>
+              <td class="num">0.7232</td><td class="num">0.7037</td>
+              <td class="num delta-neg">&minus;0.0195, <em>p</em> = 0.023</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="section-desc">
+        Negative on 7 of 8 seeds, ahead on only 162 of 348 molecules, bootstrap 95% CI
+        <span class="num">[&minus;0.0325, &minus;0.0069]</span> &mdash; excluding zero on the wrong side.
+        Adding the molecule makes assay ranking <em>worse</em>. Together the two rows say the model learned
+        two marginals, how promiscuous a molecule is and how prevalent an assay is, and nothing joining them.
+        In each direction the control that isolates the relevant marginal matches or beats the full model, so
+        the second input is only dilution.
+      </p>
 
       <div class="callout">
         <strong>What survives, stated against its control.</strong> Held-out-assay transfer at
