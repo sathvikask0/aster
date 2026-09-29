@@ -283,14 +283,25 @@ def _predictions(model, rows, x, q, ids, scale, batch_size=512):
 
 
 def _validation_loss(report):
-    # Macro average two separate loss families; no test-derived normalizer.
-    losses = []
-    for task, score in report["tasks"].items():
-        if TASKS[task]["kind"] == "classification":
-            losses.append(score["log_loss"])
-        else:
-            losses.append(score.get("mae_log10_hours", score["mae"]))
-    return float(np.mean(losses))
+    """Negative macro rank skill: lower is better, and a constant cannot win.
+
+    This replaces a macro average of raw log loss and raw MAE, which had three
+    defects. The families are in different units, so whichever carried the larger
+    magnitude silently dominated the average. Raw log loss is minimised among
+    constants by the base rate, so on lopsided assays it rewarded ignoring the
+    molecule. And dividing by a distribution-only reference fixes only the second
+    of those: the resulting skill is calibration dominated, and on held-out
+    questions it still ranks a near-constant above a model that discriminates.
+
+    Rank skill measures the ordering alone, on one scale for both families, so a
+    constant scores 0 and overconfidence cannot mask a real signal. Calibration
+    is not thereby ignored -- macro_skill is reported next to it as the gate that
+    has to be cleared before the outputs are called probabilities.
+    """
+    skill = report["macro_rank_skill"]
+    if skill is None:
+        raise ValueError("No validation question has a defined rank skill")
+    return float(-skill)
 
 
 def _inputs(rows, features, texts, names, train_names):
@@ -339,7 +350,15 @@ def train_transfer(directory: Path, out: Path, cache_dir: Path, seeds=(42, 43, 4
               "entity_dimension": int(features.shape[1]), "regression_scale": scale,
               "seeds": list(seeds), "epochs": epochs, "batch_size": batch_size,
               "hidden": hidden, "modes": list(modes), "learning_rate": 0.001,
-              "selection": "macro validation classification log-loss and native regression MAE (log10 for half-life)",
+              "selection": "macro validation rank skill: Somers' D for classification,"
+                           " Spearman for regression, both 0 at chance",
+              "selection_metric": "macro_rank_skill",
+              "selection_note": "Replaces a macro average of raw log loss and raw MAE, which mixed"
+                                " units and let a base-rate constant outscore a real model. Loss"
+                                " based skill is reported but not selected on: it is calibration"
+                                " dominated and inherits the same inversion.",
+              "calibration_gate": "macro_skill > 0 is required before treating any output as a"
+                                  " probability rather than a ranking.",
               "test_evaluated": False,
               "encoder_training": f"Frozen entity encoder ({encoder}); frozen MiniLM; shared heads trained from scratch",
               "train_task_balancing": "Round-robin tasks; reshuffled independent batches; each task contributes equally per step",
@@ -380,8 +399,12 @@ def train_transfer(directory: Path, out: Path, cache_dir: Path, seeds=(42, 43, 4
                 prediction = _predictions(model, val_rows, x[validation], q[validation], ids[validation], scale)
                 score = score_predictions(rows, prediction)
                 loss = _validation_loss(score)
-                history.append({"epoch": epoch + 1, "training_loss": float(np.mean(losses)), "validation_selection_loss": loss})
-                print(f"{mode} seed={seed} epoch={epoch+1}: validation={loss:.4f}", flush=True)
+                history.append({"epoch": epoch + 1, "training_loss": float(np.mean(losses)),
+                                "validation_selection_loss": loss,
+                                "validation_macro_rank_skill": score["macro_rank_skill"],
+                                "validation_macro_skill": score["macro_skill"]})
+                print(f"{mode} seed={seed} epoch={epoch+1}: rank={-loss:+.4f} "
+                      f"calibration={score['macro_skill']:+.4f}", flush=True)
                 if best is None or loss < best[0]:
                     best = loss, copy.deepcopy(model.state_dict()), prediction, score, epoch + 1
                     stale = 0

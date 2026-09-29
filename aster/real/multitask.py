@@ -28,6 +28,8 @@ import urllib.request
 import numpy as np
 import pandas as pd
 
+from aster.real.skill import classification_skill, macro_skill
+
 SPLITS = ("train", "validation", "test")
 VERSION = 1
 SOURCES = {
@@ -398,26 +400,35 @@ def encode_texts(texts, revision=None, batch_size=256):
 
 
 def score_by_assay(rows, probabilities) -> dict:
-    """Per-assay AUROC and log loss, plus macro averages over assays."""
-    from sklearn.metrics import log_loss, roc_auc_score
+    """Per-assay AUROC, log loss and log-loss skill, plus macro averages.
+
+    macro_auroc is the selection metric; the two loss figures are reported but
+    not selected on. Raw macro_log_loss is minimised among constants by the base
+    rate, and macro_log_loss_skill, which fixes that, is calibration dominated
+    and inherits the same inversion on unseen assays. See aster.real.skill.
+    """
+    from sklearn.metrics import roc_auc_score
 
     grouped = defaultdict(lambda: ([], []))
     for row, p in zip(rows, probabilities):
         grouped[row["task"]][0].append(row["label"])
         grouped[row["task"]][1].append(float(p))
-    per_assay, aurocs, losses = {}, [], []
+    per_assay, aurocs, losses, skills = {}, [], [], []
     for assay, (labels, probs) in sorted(grouped.items()):
-        clipped = np.clip(probs, 1e-7, 1 - 1e-7)
-        entry = {"n": len(labels), "positive_rate": round(float(np.mean(labels)), 4),
-                 "log_loss": float(log_loss(labels, clipped, labels=[0, 1]))}
+        entry = {"n": len(labels), "positive_rate": round(float(np.mean(labels)), 4)}
+        entry.update(classification_skill(labels, probs))
         if len(set(labels)) > 1:
             entry["auroc"] = float(roc_auc_score(labels, probs))
             aurocs.append(entry["auroc"])
         losses.append(entry["log_loss"])
+        skills.append(entry["log_loss_skill"])
         per_assay[assay] = entry
+    defined = [s for s in skills if s is not None]
     return {"assays": per_assay, "macro_log_loss": float(np.mean(losses)),
+            "macro_log_loss_skill": macro_skill(skills),
             "macro_auroc": float(np.mean(aurocs)) if aurocs else None,
-            "assays_scored": len(per_assay), "assays_with_both_classes": len(aurocs)}
+            "assays_scored": len(per_assay), "assays_with_both_classes": len(aurocs),
+            "assays_with_skill": len(defined)}
 
 
 def _tensors(rows, features, index, texts, assay_order, train_assays):
@@ -482,7 +493,18 @@ def train_multitask(directory: Path, out: Path, cache_dir: Path, seeds=(42, 43, 
               "assays_per_step": assays_per_step, "rows_per_assay": rows_per_assay,
               "steps_per_epoch": steps_per_epoch, "learning_rate": 0.001,
               "encoder_training": "Frozen Morgan features; frozen MiniLM; heads trained from scratch",
-              "selection": "macro validation log loss over held-out assays",
+              "selection": "macro validation AUROC over held-out assays; macro log-loss"
+                           " skill reported alongside as a calibration gate",
+              "selection_metric": "macro_auroc",
+              "selection_note": "Neither loss metric is safe to select on here. Raw macro log"
+                                " loss is minimised among constants by the base rate, so it"
+                                " rewarded giving up. Skill fixes that bound but is calibration"
+                                " dominated, and these models are overconfident: question_only"
+                                " outscores question on skill while sitting at AUROC 0.5000."
+                                " AUROC is invariant to monotone rescaling, so overconfidence"
+                                " cannot hide discrimination, and a constant is pinned at 0.5.",
+              "calibration_gate": "macro_log_loss_skill > 0 is required before treating any"
+                                  " output as a probability rather than a ranking.",
               "sampling": "Each step samples assays uniformly then rows within them, so assays"
                           " carry equal weight regardless of label count",
               "test_evaluated": False,
@@ -518,14 +540,19 @@ def train_multitask(directory: Path, out: Path, cache_dir: Path, seeds=(42, 43, 
                     running.append(float(loss.detach()))
                 probs = _predict(model, x, molecule[val_index], q[val_index], ids[val_index])
                 score = score_by_assay(val_rows, probs)
+                if score["macro_auroc"] is None:
+                    raise ValueError("No validation assay has both classes; AUROC is undefined "
+                                     "and there is nothing to select on")
                 history.append({"epoch": epoch + 1, "training_loss": float(np.mean(running)),
                                 "validation_macro_log_loss": score["macro_log_loss"],
+                                "validation_macro_log_loss_skill": score["macro_log_loss_skill"],
                                 "validation_macro_auroc": score["macro_auroc"]})
                 print(f"{mode} seed={seed} epoch={epoch + 1}: "
+                      f"skill={score['macro_log_loss_skill']:+.4f} "
                       f"loss={score['macro_log_loss']:.4f} auroc={score['macro_auroc']:.4f}",
                       flush=True)
-                if best is None or score["macro_log_loss"] < best[0]:
-                    best, stale = (score["macro_log_loss"], copy_state(model), score, epoch + 1), 0
+                if best is None or score["macro_auroc"] > best[0]:
+                    best, stale = (score["macro_auroc"], copy_state(model), score, epoch + 1), 0
                 else:
                     stale += 1
                 if stale >= 3:
@@ -538,6 +565,7 @@ def train_multitask(directory: Path, out: Path, cache_dir: Path, seeds=(42, 43, 
             reports[name] = {"mode": mode, "seed": seed, "best_epoch": best[3],
                              "history": history,
                              "validation_macro_log_loss": best[2]["macro_log_loss"],
+                             "validation_macro_log_loss_skill": best[2]["macro_log_loss_skill"],
                              "validation_macro_auroc": best[2]["macro_auroc"],
                              "checkpoint_sha256": file_digest(checkpoint)}
             with (out / "selection.json").open("w") as stream:

@@ -25,6 +25,7 @@ from sklearn.metrics import (accuracy_score, average_precision_score, balanced_a
 
 from aster.real.peptiverse import (AA, TASKS, VERSION, digest, file_digest,
                                   load_benchmark, write_json)
+from aster.real.skill import classification_skill, macro_skill, rank_skill, regression_skill
 
 
 def metrics(task: str, labels, predictions) -> dict:
@@ -45,6 +46,9 @@ def metrics(task: str, labels, predictions) -> dict:
                       mcc=float(matthews_corrcoef(y, hard)),
                       brier=float(brier_score_loss(y, p)),
                       log_loss=float(log_loss(y, p, labels=[0, 1])))
+        # Referenced to this question's own base rate, so a constant scores <= 0.
+        result.update(classification_skill(y, p))
+        result["rank_skill"] = rank_skill("classification", y, p)
     else:
         result.update(mae=float(mean_absolute_error(y, p)),
                       rmse=float(np.sqrt(mean_squared_error(y, p))),
@@ -55,6 +59,13 @@ def metrics(task: str, labels, predictions) -> dict:
             if (p <= 0).any():
                 raise ValueError("Half-life predictions must be positive hours")
             result["mae_log10_hours"] = float(mean_absolute_error(np.log10(y), np.log10(p)))
+        # Skill on the scale the task is actually judged on, referenced to this
+        # question's own median. Dimensionless, so it can be averaged with the
+        # classification skill; raw MAE and raw log loss cannot.
+        skill = (regression_skill(np.log10(y), np.log10(p)) if task == "half_life"
+                 else regression_skill(y, p))
+        result.update({k: v for k, v in skill.items() if k != "mae"})
+        result["rank_skill"] = rank_skill("regression", y, p)
     return result
 
 
@@ -81,9 +92,24 @@ def score_predictions(rows: list[dict], predictions: list[dict], split="validati
     scored = {task: metrics(task, *zip(*values)) for task, values in sorted(grouped.items())}
     classification = [v["balanced_accuracy"] for k, v in scored.items()
                       if TASKS[k]["kind"] == "classification"]
+    skills = {k: v.get("log_loss_skill") if TASKS[k]["kind"] == "classification"
+              else v.get("mae_skill") for k, v in scored.items()}
+    ranks = {k: v.get("rank_skill") for k, v in scored.items()}
     return {"split": split, "tasks": scored,
             "classification_macro_balanced_accuracy": float(np.mean(classification)) if classification else None,
-            "regression_aggregation": "Per-task native units; no average across incompatible units."}
+            "macro_rank_skill": macro_skill(ranks.values()),
+            "macro_skill": macro_skill(skills.values()),
+            "task_rank_skill": ranks,
+            "task_skill": skills,
+            "rank_aggregation": "Somers' D (2*AUROC - 1) for classification, Spearman for"
+                                " regression: both are 0 at chance and 1 at a perfect"
+                                " ordering, so they macro-average. This is what selection"
+                                " uses, being immune to miscalibration.",
+            "skill_aggregation": "Each question's loss divided by its own distribution-only"
+                                 " reference (base rate, or median), so classification and"
+                                 " regression skills are dimensionless and comparable. Reported"
+                                 " as a calibration gate, not selected on: it is calibration"
+                                 " dominated and ranks a constant above a discriminating model."}
 
 
 def feature_matrix(rows: list[dict], cache_dir: Path) -> sparse.csr_matrix:
@@ -187,17 +213,25 @@ def train_baselines(directory: Path, out: Path, cache_dir: Path, seed=42) -> dic
                 raise RuntimeError(f"{task}: logistic baseline did not converge")
             prediction = _predict(model, task, xv)
             score = metrics(task, yv, prediction)
-            # Use proper probability loss for classification and preserve the
-            # half-life log transform in validation selection.
-            loss = score["log_loss"] if classification else score.get("mae_log10_hours", score["mae"])
+            # Select on skill, not raw loss: among constant predictors the base
+            # rate minimises log loss, so raw loss favours the most regularised
+            # model on the lopsided assays. Negated so lower still means better.
+            # Loss based skill is right *here*, unlike in the held-out-question
+            # protocols: these heads see their own assay in training, so the
+            # calibration that skill rewards is actually reachable. Where the
+            # assay is unseen it is not, and selection there uses rank skill.
+            skill = score["log_loss_skill"] if classification else score["mae_skill"]
+            if skill is None:
+                raise ValueError(f"{task}: validation has no spread, so skill is undefined")
+            loss = -skill
             candidates.append({"C" if classification else "alpha": regularization,
-                               "selection_loss": loss, "validation": score})
+                               "selection_loss": loss,
+                               "selection_skill": -loss, "validation": score})
             if best is None or loss < best[0]:
                 best = loss, model, prediction, regularization
         _, model, predicted, selected = best
         selections[task] = {"model": type(model).__name__, "regularization": selected,
-                            "selection_metric": "log_loss" if classification else
-                            "mae_log10_hours" if task == "half_life" else "mae",
+                            "selection_metric": "log_loss_skill" if classification else "mae_skill",
                             "candidates": candidates}
         for i, prediction, constant in zip(val, predicted, _predict(dummy, task, xv)):
             predictions.append({"id": rows[i]["id"], "prediction": float(prediction)})

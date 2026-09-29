@@ -52,10 +52,23 @@ per-property head cannot answer a held-out question, so the ordinary
 Four predeclared controls run on seeds 42, 43, and 44: `question` reads peptide
 and question, `entity_only` ignores question text, `task_id` uses a zero vector
 for unseen task IDs, and `question_only` ignores the peptide. Tasks receive
-equal weight in gradient steps. Checkpoint selection uses the equal-weight
-mean of validation classification log loss and regression MAE (log10 hours for
-half-life); that selection objective is a fixed convention, not an overall
-biological performance score. Regression normalization uses only training
+equal weight in gradient steps. Checkpoint selection uses the equal-weight mean
+of validation **rank skill** -- Somers' D (`2*AUROC - 1`) for classification,
+Spearman for regression, both zero at chance -- so a constant predictor scores
+zero and cannot be selected. Loss-based skill (each question's log loss or MAE
+over its own base-rate/median reference) is reported alongside as a calibration
+gate: until it exceeds zero the outputs are a ranking, not probabilities. That
+selection objective is a fixed convention, not an overall biological performance
+score.
+
+Selection previously used the mean of raw classification log loss and raw
+regression MAE, which was wrong twice over. The two families are in different
+units, so the larger-magnitude one silently dominated; and among constant
+predictors the one minimising log loss is exactly the base rate, so on lopsided
+assays the objective rewarded ignoring the molecule. On the strict ToxCast split
+the `question_only` control scored a *better* macro log loss than `question`
+while sitting at AUROC 0.5000 and MCC 0. See `aster/real/skill.py` for why
+loss-based skill fixes the bound but still cannot be selected on. Regression normalization uses only training
 labels. Test task text is first encoded at evaluation, and test labels never
 select a checkpoint. The explicit evaluator checks checkpoint hashes and
 compares the question models with deliberately wrong, same-output-type prompts.

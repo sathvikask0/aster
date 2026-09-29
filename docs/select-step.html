@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Aster &middot; the Select step: three ways the evaluation lied</title>
-  <meta name="description" content="Four training questions put held-out-question transfer at chance; 484 put it at 0.669. Along the way the evaluation misled itself three times — a confound that mimicked discovery, a holdout too loose to see the effect, and a metric that preferred a constant predictor." />
+  <title>Aster &middot; the Select step: four ways the evaluation lied</title>
+  <meta name="description" content="Held-out-assay transfer reaches 0.676 AUROC at 484 training questions — but ablating the question text costs 0.006 ± 0.013, so the transfer is carried by molecule propensity, not comprehension. Four evaluation failures found on the way, the last one mine." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
@@ -33,10 +33,12 @@
       <h1>The Select step</h1>
       <p class="lead">
         The peptide benchmark holds a whole assay out of training and asks the model to answer it anyway. It
-        fails at chance across four configurations. Scaling the question axis from four to 484 fixes it
-        &mdash; but getting there meant catching the evaluation misleading itself three separate times.
-        <strong>A shortcut and a discovery produce the same number.</strong> This page is the three cases and
-        how each was caught.
+        fails at chance across four configurations. Scaling the question axis from four to 484 lifts held-out
+        transfer to <span class="num">0.676</span> &mdash; but ablating the question text costs
+        <span class="num">+0.006 &plusmn; 0.013</span>, so that result is molecule propensity and not
+        comprehension. Getting to a number I trust meant catching the evaluation misleading itself four
+        separate times, the last of them my own. <strong>A shortcut and a discovery produce the same
+        number.</strong> This page is the four cases and how each was caught.
       </p>
       <div class="meta-bar">
         <span>Repository: <a href="https://github.com/sathvikask0/aster" target="_blank" rel="noopener">sathvikask0/aster</a></span>
@@ -117,6 +119,19 @@
         time. A protein language model did not help. The obvious next move is a bigger one.
       </p>
 
+      <div class="correction">
+        <strong>These four checkpoints were selected under the objective that finding 03 breaks</strong>, so
+        the digits above are not ones the current code would produce. Rescoring the saved validation
+        predictions under the corrected rule does not rescue anything: rank skill comes out at
+        <span class="num">&minus;0.096</span> for <span class="model-name">question</span>,
+        <span class="num">&minus;0.089</span> for <span class="model-name">entity_only</span> and
+        <span class="num">&minus;0.055</span> for <span class="model-name">task_id</span> &mdash; all three
+        <em>below</em> chance &mdash; against exactly <strong class="num">0.0000</strong> for
+        <span class="model-name">question_only</span>. Which restates the last column more precisely than it
+        was first meant: the control wins not because it is good, but because it is the only one of the four
+        that does not manage to be worse than chance.
+      </div>
+
       <div class="highlight-card">
         <div class="highlight-stat">34,000 peptide examples &middot; 4 questions</div>
         <div class="highlight-text">
@@ -159,26 +174,26 @@
         <div class="exp-card">
           <div class="exp-header">
             <span class="exp-num">02</span>
-            <span class="exp-tag tag-decisive">Decisive</span>
-            <span class="exp-title">A stricter holdout is what made the real effect visible</span>
+            <span class="exp-tag tag-wrong">Premature</span>
+            <span class="exp-title">A stricter holdout was necessary, but did not license the claim</span>
           </div>
           <div class="exp-body">
             Rebuilt so that <strong>no molecule appears in two splits</strong> &mdash; 947k train labels,
-            zero shared molecules. The shortcut shrank and the effect separated:
-            <strong class="num">0.6693 &plusmn; 0.008</strong> against
-            <span class="num">0.6489 &plusmn; 0.011</span>, ahead on every seed
-            (<span class="delta-pos">+0.021</span>, <span class="delta-pos">+0.025</span>,
-            <span class="delta-pos">+0.015</span>) where the loose split's <span class="num">+0.004</span>
-            had flipped sign. Same data, same model, same code. Tightening the holdout turned an unreadable
-            comparison into a sign-stable one &mdash; the looser split had been hiding the result, not
-            inflating it.
+            zero shared molecules. The shortcut shrank, and a gap appeared to open:
+            <span class="num">0.6693 &plusmn; 0.008</span> against <span class="num">0.6489 &plusmn; 0.011</span>,
+            ahead on all three seeds (<span class="delta-pos">+0.021</span>,
+            <span class="delta-pos">+0.025</span>, <span class="delta-pos">+0.015</span>) where the loose
+            split's <span class="num">+0.004</span> had flipped sign. Tightening the holdout was the right
+            move and it did shrink the confound. But reading a <em>result</em> off this comparison was
+            premature on two counts, and both are below: these checkpoints were chosen by a broken objective,
+            and three seeds is not enough to know a sign.
           </div>
         </div>
 
         <div class="exp-card">
           <div class="exp-header">
             <span class="exp-num">03</span>
-            <span class="exp-tag tag-wrong">Broken metric</span>
+            <span class="exp-tag tag-clean">Broken, then fixed</span>
             <span class="exp-title">The selection objective preferred a constant predictor</span>
           </div>
           <div class="exp-body">
@@ -187,17 +202,74 @@
             &mdash; <strong class="num">0.4228</strong> against <span class="num">0.4642</span> &mdash; while
             having <span class="num">AUROC = 0.5000</span> and <span class="num">MCC = 0</span>. A literal
             constant. With base rates spanning 0.3%&ndash;83%, safe scores better than skilled, so selection
-            would have shipped the constant and then scored it on test. Found before the test split was
-            opened; it stays shut until the selection rule is fixed.
+            would have shipped the constant and then scored it on test.
+            <br><br>
+            <strong>Fixed, in two stages, because the obvious fix was not enough.</strong> Dividing each
+            assay's loss by its own base-rate reference gives a skill score, which does bound every constant
+            predictor at <span class="num">&le; 0</span>. It was still the wrong thing to select on:
+            <span class="model-name">question_only</span> scored <span class="num">&minus;0.2015</span>
+            against <span class="model-name">question</span>'s <span class="num">&minus;0.3809</span> and won
+            again. Log loss is a proper scoring rule, so it answers calibration and discrimination at once,
+            and these models are overconfident enough that calibration swamps the signal. On held-out
+            questions that is not fixable &mdash; calibrating to an unseen assay's prior would need labels
+            from that assay. So the two metrics were given separate jobs: <strong>AUROC selects</strong>,
+            being invariant to monotone rescaling and pinning any constant at exactly
+            <span class="num">0.5000</span> (confirmed: <span class="model-name">question_only</span> scores
+            0.5000 with zero variance across every seed), and <strong>skill reports</strong>, as the gate
+            that must clear zero before an output is called a probability. Nothing clears it yet.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">04</span>
+            <span class="exp-tag tag-wrong">Mine</span>
+            <span class="exp-title">The effect did not survive the fix, or five more seeds</span>
+          </div>
+          <div class="exp-body">
+            With selection corrected, everything was re-run. Every control's AUROC rose, because AUROC is now
+            what selection optimises &mdash; but <span class="model-name">entity_only</span> rose further than
+            <span class="model-name">question</span>, and the gap fell from
+            <span class="num">+0.0204</span> to <strong class="num">+0.0052</strong>. The broken objective had
+            been penalising the control more than the model, and roughly three quarters of the headline was
+            that artifact.
+            <br><br>
+            Then five more seeds, which is the part I should have run first. The three-seed
+            <span class="num">&plusmn;0.0027</span> had been a low-variance cluster; across eight seeds the
+            spread is <strong>five times larger</strong> and two seeds go negative.
+            <span class="model-name">question</span> reaches <span class="num">0.6758 &plusmn; 0.0076</span>
+            against <span class="num">0.6700 &plusmn; 0.0076</span> &mdash; a difference of
+            <strong class="num">+0.0058 &plusmn; 0.0130</strong>, positive on 6 of 8 seeds,
+            <span class="num">p = 0.25</span>. Pairing by assay instead, which has far more power, lands on
+            the same estimate and is no kinder: <span class="num">+0.0058</span> over 67 held-out assays,
+            <span class="model-name">question</span> ahead on <strong>34 of 67</strong> &mdash; a coin flip
+            &mdash; <span class="num">p = 0.55</span>, bootstrap 95% CI
+            <span class="num">[&minus;0.0125, +0.0246]</span>.
+            <br><br>
+            So the question channel contributes nothing measurable, and finding 02 was my own version of the
+            same mistake as finding 01: a number that looked like a result because the comparison had not
+            been made hard enough yet.
           </div>
         </div>
       </div>
 
       <div class="callout">
-        The transferable lesson is the reporting baseline. Molecule propensity survives molecule holdout, so
-        question transfer has to be stated <strong>against <span class="model-name">entity_only</span></strong>,
-        not against chance. Reported against chance, this work would claim 0.669. Reported honestly, it
-        claims <span class="num">+0.020</span> over a control that reads no question at all.
+        <strong>What survives, stated against its control.</strong> Held-out-assay transfer at
+        <span class="num">0.676</span> is real &mdash; large, reproducible, and far above the
+        <span class="model-name">question_only</span> floor of exactly <span class="num">0.5000</span>. What
+        it is <em>not</em> is comprehension. Ablating the question text costs
+        <span class="num">+0.0058 &plusmn; 0.0130</span>, indistinguishable from zero, so the transfer is
+        carried by molecule propensity: a compound active in many assays is a good bet in an unseen one, and
+        the assay description is doing no measurable work on top of that. Reported against chance this would
+        claim 0.676. Reported against its control it claims nothing yet.
+      </div>
+
+      <div class="correction">
+        <strong>One caveat on the framing, since it is easy to overread.</strong> &ldquo;Four questions gave
+        chance, 484 gave 0.676&rdquo; is not a controlled comparison of question count: the two runs differ in
+        dataset, molecule class, label volume and assay count all at once. What the peptide and ToxCast runs
+        jointly support is narrower &mdash; that the question axis is where the peptide benchmark is starved,
+        and that having 484 of them is still not sufficient for the question channel to carry signal here.
       </div>
 
       <h2>Where the questions came from, and what could not be fixed</h2>
@@ -249,27 +321,43 @@
 
       <h2>What this changes</h2>
       <p class="section-desc">
-        The mechanism is sound and the bottleneck is the number of questions, not the encoder. Four questions
-        put held-out-question transfer at chance; 484 put it at <span class="num">0.669</span> on assays and
-        molecules never seen. Nothing about a bigger protein model would have changed that, and two runs
-        settled what a model-size sweep would have obscured.
+        Four evaluation failures, and the honest tally is that three of them were inflating a number and the
+        fourth was me believing the inflated number. What is left standing is a real transfer result with no
+        demonstrated question-comprehension component, an encoder that was never the bottleneck, and a
+        selection rule that now cannot be won by giving up. The test split has still never been opened:
+        <span class="num">test_evaluated: false</span> on every run above.
       </p>
       <ul class="controls-list">
-        <li><strong>Fix the selection rule first.</strong> Skill scores against per-assay base rates, so
-          calibration and discrimination are separated before a checkpoint is chosen. No test evaluation
-          until then.</li>
-        <li><strong>Report against controls, not chance.</strong> Every future number on this site carries
-          its <span class="model-name">entity_only</span> reference beside it.</li>
-        <li><strong>Get more peptide questions.</strong> Nine assays is thin, and four of them are consumed
-          by the held-out splits. This is the only change that attacks the real bottleneck.</li>
+        <li><strong>Three seeds is not a result.</strong> The cheapest of these four lessons and the one I paid
+          for twice. Eight seeds cost six minutes and reversed the conclusion; the seed spread was five times
+          what three seeds implied.</li>
+        <li><strong>Pair the comparison on the axis with the most units.</strong> Eight seeds give eight
+          observations; 67 held-out assays give 67, and the per-assay pairing is what showed the effect was a
+          coin flip rather than merely noisy.</li>
+        <li><strong>Selection and reporting need different metrics.</strong> Discrimination selects, because it
+          survives miscalibration; calibration gates, because it is what makes an output a probability. A
+          single proper scoring rule tries to do both and does neither on held-out questions.</li>
+        <li><strong>Get more peptide questions.</strong> Nine assays is thin and four are consumed by the
+          splits. Still the change that attacks the real bottleneck &mdash; and now the one with a clean
+          null to beat.</li>
         <li><strong>Match the holdout to the claim.</strong> Holding molecules out changed the answer once
           already. If the claim is a new scaffold, hold out scaffolds.</li>
       </ul>
 
+      <div class="highlight-card">
+        <strong>A sanity anchor for the new metric.</strong> Per-task supervised heads, which do see their own
+        assay in training, score <span class="num">+0.202</span> calibration skill across nine peptide assays
+        &mdash; positive on eight of nine. A constant predictor scores exactly
+        <strong class="num">0.0000</strong> rank skill and <span class="num">&minus;0.009</span> calibration
+        skill. The held-out-question models score <span class="num">&minus;0.47</span> and worse. So the
+        negative skill is caused by the held-out-ness, not by a broken metric or a broken model: calibration
+        is reachable once you have seen the assay, and not before.
+      </div>
+
       <p class="zero-note">
         Every run above is reproducible from the repository: pinned dataset revisions with checksums, the
         protocol written before optimization, and <span class="num">test_evaluated: false</span> on all of
-        them. 165 tests, green in CI.
+        them. 196 tests, green in CI.
       </p>
     </article>
   </main>
