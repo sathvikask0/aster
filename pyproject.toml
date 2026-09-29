@@ -16,3 +16,8 @@ benchmark = ["rdkit>=2025.3,<2027"]
 
 [tool.setuptools.packages.find]
 include = ["aster*"]
+
+[tool.pytest.ini_options]
+# tests/test_compare_runs.py and tests/test_finetune.py import from scripts/,
+# which is a namespace package at the repo root rather than an installed one.
+pythonpath = ["."]
