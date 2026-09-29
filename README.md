@@ -6,6 +6,68 @@ Give Aster a biological context and candidate answers; its proposed role is to r
 
 > 📄 **Project site: [sathvikask0.github.io/aster](https://sathvikask0.github.io/aster/)** — every experiment, indexed. Start with [the plain-language summary](https://sathvikask0.github.io/aster/state.html).
 
+## PeptiVerse: hold out entire questions
+
+The eight-assay benchmark covers solubility, penetrance, PAMPA, Caco-2,
+half-life, hemolysis, toxicity, and peptide–target binding affinity. The transfer
+protocol holds out **questions and peptide identities simultaneously**:
+
+| Split | Questions | Examples after overlap removal |
+| --- | --- | ---: |
+| Train | Solubility, penetrance, PAMPA, binding affinity | 28,761 |
+| Validation | Hemolysis, Caco-2 | 5,492 |
+| Test | Toxicity, half-life | 11,198 |
+
+These counts describe the default pinned dataset. All rows for a question belong
+to one split. If a peptide identity occurs in several questions, test takes
+priority over validation, and validation over training; lower-priority labels
+are excluded. The default split excludes 1,752 labels, without consulting their
+values. No missing labels are inferred. Exact structures and source sequence
+aliases are grouped globally; this is **not a sequence-family holdout**.
+
+```bash
+uv sync --python 3.11 --extra test --extra benchmark --locked
+# Only needed if the original eight-assay dataset has not been built:
+uv run --extra benchmark python scripts/build_peptiverse_benchmark.py
+
+uv run --extra benchmark python scripts/run_peptiverse_transfer.py prepare
+uv run --extra benchmark python scripts/run_peptiverse_transfer.py train
+# Run once, after completing all model selection:
+uv run --extra benchmark python scripts/run_peptiverse_transfer.py evaluate
+```
+
+`prepare` writes `data/peptiverse_transfer/{train,validation,test}.jsonl` plus a
+checksum-verified manifest. Change the question assignment using `--train-tasks`,
+`--validation-tasks`, and `--test-tasks`; every assay must appear exactly once.
+Choose fresh `--data` and `--out` directories for another experiment. The
+original supervised benchmark and its existing models are preserved.
+
+The pilot trains shared classification and regression heads from scratch on
+fixed chiral Morgan fingerprints, molecular descriptors, and target protein
+composition for affinity. Frozen MiniLM encodes question text and answer
+semantics. **This pilot does not fine-tune ESM or PeptideCLM.** A separate
+per-property head cannot answer a held-out question, so the ordinary
+`run_peptiverse_benchmark.py train` command rejects this transfer dataset.
+
+Four predeclared controls run on seeds 42, 43, and 44: `question` reads peptide
+and question, `entity_only` ignores question text, `task_id` uses a zero vector
+for unseen task IDs, and `question_only` ignores the peptide. Tasks receive
+equal weight in gradient steps. Checkpoint selection uses the equal-weight
+mean of validation classification log loss and regression MAE (log10 hours for
+half-life); that selection objective is a fixed convention, not an overall
+biological performance score. Regression normalization uses only training
+labels. Test task text is first encoded at evaluation, and test labels never
+select a checkpoint. The explicit evaluator checks checkpoint hashes and
+compares the question models with deliberately wrong, same-output-type prompts.
+
+Results and model provenance are saved under `checkpoints/peptiverse_transfer/`.
+The protocol is saved before optimization; every seed and control is reported.
+Holding out half-life also requires extrapolating to a new measurement scale,
+so weak transfer can reflect inadequate scale learning as well as biology.
+Validation questions influence model selection; they are not final unseen tests.
+Earlier supervised runs used these source tasks, so this is an exploratory
+transfer experiment with fresh models, not a previously undisclosed dataset.
+
 ## Current status
 
 **v0.1 is a working engineering prototype, not a biologically validated model.**

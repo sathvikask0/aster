@@ -156,6 +156,8 @@ def _predict(model, task, features):
 def train_baselines(directory: Path, out: Path, cache_dir: Path, seed=42) -> dict:
     """Fit on train, select regularization on validation, never score test."""
     rows, manifest = load_benchmark(directory)
+    if manifest.get("task_splits"):
+        raise ValueError("Per-task heads cannot predict unseen questions; use run_peptiverse_transfer.py")
     out = Path(out)
     if (out / "selection.json").exists():
         raise FileExistsError(f"{out} already contains a fitted run; choose a new output directory")
@@ -221,6 +223,8 @@ def evaluate_frozen(directory: Path, model_dir: Path, cache_dir: Path, split="te
     if split not in ("validation", "test"):
         raise ValueError("Evaluate validation or test")
     rows, manifest = load_benchmark(directory)
+    if manifest.get("task_splits"):
+        raise ValueError("Per-task heads cannot evaluate unseen questions; use run_peptiverse_transfer.py")
     model_dir = Path(model_dir)
     selection = json.loads((model_dir / "selection.json").read_text())
     if selection["benchmark_files"] != manifest["files"]:

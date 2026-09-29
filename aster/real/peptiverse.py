@@ -264,11 +264,14 @@ def assign_splits(rows: list[dict], seed: int = 42,
     return sorted(out, key=lambda r: (r["task"], r["id"]))
 
 
-def validate_benchmark(rows: list[dict], tasks=None) -> dict:
+def validate_benchmark(rows: list[dict], tasks=None, task_splits: dict | None = None) -> dict:
     """Fail closed on missing tasks, bad targets, duplicate IDs or split leakage."""
     tasks = set(TASKS if tasks is None else tasks)
     if not rows or {r["task"] for r in rows} != tasks:
         raise ValueError("Benchmark must contain every requested task")
+    if task_splits is not None and (set(task_splits) != tasks or
+                                    set(task_splits.values()) != set(SPLITS)):
+        raise ValueError("Task split plan must assign every task and populate all three splits")
     seen_ids, identities = set(), defaultdict(set)
     for row in rows:
         if row["id"] in seen_ids:
@@ -276,6 +279,8 @@ def validate_benchmark(rows: list[dict], tasks=None) -> dict:
         seen_ids.add(row["id"])
         if row["split"] not in SPLITS or not math.isfinite(row["label"]):
             raise ValueError("Invalid split or nonfinite label")
+        if task_splits is not None and row["split"] != task_splits[row["task"]]:
+            raise ValueError("Held-out question leaked into another split")
         spec = TASKS[row["task"]]
         if row["kind"] != spec["kind"] or row["question"] != spec["question"]:
             raise ValueError("Task schema mismatch")
@@ -298,6 +303,9 @@ def validate_benchmark(rows: list[dict], tasks=None) -> dict:
         counts[task] = {}
         for split in SPLITS:
             subset = [r for r in rows if r["task"] == task and r["split"] == split]
+            if task_splits is not None and split != task_splits[task]:
+                counts[task][split] = {"n": 0, "groups": 0}
+                continue
             if not subset:
                 raise ValueError(f"{task}: empty {split} split")
             labels = [r["label"] for r in subset]
@@ -378,5 +386,5 @@ def load_benchmark(directory: Path) -> tuple[list[dict], dict]:
         if any(row["split"] != split for row in subset):
             raise ValueError("Row stored in the wrong split file")
         rows.extend(subset)
-    validate_benchmark(rows)
+    validate_benchmark(rows, task_splits=manifest.get("task_splits"))
     return rows, manifest
