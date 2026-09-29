@@ -1,8 +1,15 @@
 """Question-disjoint, peptide-disjoint transfer protocol and shared pilot model.
 
-The chemical encoder here is a fixed Morgan/descriptor representation, not ESM
-or PeptideCLM. Frozen MiniLM supplies task semantics. This inexpensive pilot
-tests the transfer setup before committing to foundation-model fine-tuning.
+Peptides are represented by a fixed Morgan/descriptor encoder, optionally
+concatenated with frozen mean-pooled ESM-2 embeddings. Frozen MiniLM supplies
+task semantics. Nothing here fine-tunes ESM or PeptideCLM; the protein model is
+used as a frozen feature extractor, so this remains an inexpensive pilot.
+
+ESM needs an amino-acid sequence, and several assays in this benchmark carry
+only SMILES (pampa, caco2 and toxicity have none at all). Those rows get a zero
+ESM block plus an explicit availability flag, so the encoder never silently
+invents a sequence -- and an ESM run cannot say anything about a SMILES-only
+task beyond what Morgan already said.
 """
 from __future__ import annotations
 
@@ -21,20 +28,82 @@ from aster.real.peptiverse import (SPLITS, TASKS, file_digest, load_benchmark,
 from aster.real.peptiverse_evaluation import feature_matrix, score_predictions
 
 DEFAULT_PLAN = {
-    "train": ["solubility", "penetrance", "pampa", "binding_affinity"],
+    "train": ["solubility", "penetrance", "nf", "pampa", "binding_affinity"],
     "validation": ["hemolysis", "caco2"],
+    "test": ["toxicity", "half_life"],
+}
+# Plan for a sequence-only run. caco2 and pampa are dropped outright: they are
+# entirely macrocyclic, so no sequence exists for a protein encoder to read.
+# Dropping them costs the only regression question in validation, which leaves
+# checkpoint selection resting on classification log loss alone.
+SEQUENCE_PLAN = {
+    "train": ["solubility", "penetrance", "nf", "binding_affinity"],
+    "validation": ["hemolysis"],
     "test": ["toxicity", "half_life"],
 }
 MODES = ("question", "entity_only", "task_id", "question_only")
 TEXT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+ENCODERS = ("morgan", "esm", "esm+morgan")
+# Hidden width per ESM-2 checkpoint, needed to keep the feature space the same
+# width on a split whose rows carry no sequence at all (pampa, caco2, toxicity).
+ESM_WIDTHS = {"8M": 320, "35M": 480, "150M": 640, "650M": 1280}
+
+
+def esm_block(rows, cache_dir, esm_size="35M"):
+    """Frozen mean-pooled ESM-2 rows, L2 normalized, with an availability flag.
+
+    Row-wise L2 normalization is a fixed transform: it fits no statistic to any
+    split, so it cannot leak validation or test information. Sequence-less rows
+    get zeros and a 0 flag rather than a stand-in sequence.
+    """
+    from scipy import sparse
+
+    from aster.real.embed import ESM_SIZES, embed_sequences
+    if esm_size not in ESM_SIZES:
+        raise ValueError(f"Unknown ESM size: {esm_size}")
+    present = [i for i, r in enumerate(rows) if r.get("sequence")]
+    flag = np.zeros((len(rows), 1), dtype=np.float32)
+    if not present:
+        # Nothing to embed; width still has to match the other splits.
+        zeros = np.zeros((len(rows), ESM_WIDTHS[esm_size]), dtype=np.float32)
+        return sparse.csr_matrix(np.hstack([zeros, flag]))
+    vectors = embed_sequences([rows[i]["sequence"] for i in present], model=esm_size,
+                              cache_dir=str(cache_dir))
+    if vectors.shape[1] != ESM_WIDTHS[esm_size]:
+        raise ValueError(f"Expected width {ESM_WIDTHS[esm_size]} for {esm_size}, got {vectors.shape[1]}")
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    vectors = vectors / np.maximum(norms, 1e-8)
+    block = np.zeros((len(rows), vectors.shape[1]), dtype=np.float32)
+    for slot, index in enumerate(present):
+        block[index] = vectors[slot]
+        flag[index] = 1.
+    return sparse.csr_matrix(np.hstack([block, flag]))
+
+
+def entity_matrix(rows, cache_dir, encoder="morgan", esm_size="35M"):
+    """Peptide features under the requested encoder. Morgan stays the default."""
+    from scipy import sparse
+
+    if encoder not in ENCODERS:
+        raise ValueError(f"Unknown encoder: {encoder}")
+    if encoder == "morgan":
+        return feature_matrix(rows, cache_dir)
+    esm = esm_block(rows, cache_dir, esm_size)
+    if encoder == "esm":
+        return esm
+    return sparse.hstack([feature_matrix(rows, cache_dir), esm], format="csr")
 
 
 def task_assignment(plan: dict) -> dict:
+    """Map question -> split. A plan may cover a subset of the assays, but every
+    question it names must be real and must appear in exactly one split."""
     if set(plan) != set(SPLITS) or any(not plan[s] for s in SPLITS):
         raise ValueError("Plan needs nonempty train, validation and test question lists")
     flat = [task for split in SPLITS for task in plan[split]]
-    if len(flat) != len(set(flat)) or set(flat) != set(TASKS):
-        raise ValueError("Assign each of the eight questions to exactly one split")
+    if len(flat) != len(set(flat)):
+        raise ValueError("Assign each question to exactly one split")
+    if unknown := set(flat) - set(TASKS):
+        raise ValueError(f"Unknown questions in plan: {sorted(unknown)}")
     return {task: split for split in SPLITS for task in plan[split]}
 
 
@@ -60,12 +129,13 @@ def hold_out_questions(rows: list[dict], plan: dict) -> tuple[list[dict], dict]:
         else:
             kept.append({**row, "split": split})
     kept.sort(key=lambda r: (r["task"], r["id"]))
-    checks = validate_benchmark(kept, task_splits=assignment)
+    checks = validate_benchmark(kept, tasks=set(assignment), task_splits=assignment)
     return kept, {"excluded_shared_identity_rows": dict(sorted(dropped.items())),
                   "excluded_rows": sum(dropped.values()), "checks": checks}
 
 
-def build_transfer(source: Path, out: Path, plan: dict | None = None) -> dict:
+def build_transfer(source: Path, out: Path, plan: dict | None = None,
+                   require_sequence: bool = False) -> dict:
     plan = copy.deepcopy(DEFAULT_PLAN if plan is None else plan)
     out = Path(out)
     if out.exists() and any(out.iterdir()):
@@ -73,7 +143,26 @@ def build_transfer(source: Path, out: Path, plan: dict | None = None) -> dict:
     rows, original = load_benchmark(source)
     if original.get("task_splits"):
         raise ValueError("Build from the complete supervised benchmark, not an already filtered holdout")
+    sequence_audit = None
+    if require_sequence:
+        # Keep only rows a protein encoder can actually read. This is a filter on
+        # the input representation, never on labels, but it is not label-neutral
+        # in effect: what survives is the plain linear subset of each assay, so
+        # results describe that subset and not the original population.
+        before = Counter(r["task"] for r in rows)
+        rows = [r for r in rows if r.get("sequence")]
+        after = Counter(r["task"] for r in rows)
+        sequence_audit = {
+            "dropped_without_sequence": {t: before[t] - after[t] for t in sorted(before)
+                                         if before[t] - after[t]},
+            "retained_with_sequence": dict(sorted(after.items())),
+            "caveat": "Sequence-bearing subset only; each assay's modified peptides are absent",
+        }
+        if empty := sorted(set(task_assignment(plan)) - set(after)):
+            raise ValueError(f"No sequence-bearing rows remain for: {empty}")
     rows, audit = hold_out_questions(rows, plan)
+    if sequence_audit:
+        audit["sequence_filter"] = sequence_audit
     out.mkdir(parents=True, exist_ok=True)
     files = {}
     for split in SPLITS:
@@ -86,7 +175,9 @@ def build_transfer(source: Path, out: Path, plan: dict | None = None) -> dict:
     manifest = {**original, "benchmark": "peptiverse_question_transfer",
                 "parent_files": original["files"], "files": files,
                 "parent_split_policy": original["split_policy"],
-                "split_policy": "held_out_questions_and_global_identities",
+                "split_policy": "held_out_questions_and_global_identities"
+                                + ("_sequence_only" if require_sequence else ""),
+                "require_sequence": require_sequence,
                 "fractions": None, "task_splits": task_assignment(plan),
                 "question_plan": plan, "transfer_audit": audit,
                 "checks": audit["checks"],
@@ -212,9 +303,12 @@ def _inputs(rows, features, texts, names, train_names):
 
 def train_transfer(directory: Path, out: Path, cache_dir: Path, seeds=(42, 43, 44),
                    epochs=12, batch_size=256, hidden=64,
-                   modes=("question", "entity_only", "task_id", "question_only")):
+                   modes=("question", "entity_only", "task_id", "question_only"),
+                   encoder="morgan", esm_size="35M"):
     if epochs < 1 or batch_size < 1 or hidden < 1 or not seeds or not modes or set(modes) - set(MODES):
         raise ValueError("Invalid training configuration")
+    if encoder not in ENCODERS:
+        raise ValueError(f"Unknown encoder: {encoder}")
     out = Path(out)
     if out.exists() and any(out.iterdir()):
         raise FileExistsError(f"Refusing to overwrite {out}; choose a fresh run directory")
@@ -227,7 +321,7 @@ def train_transfer(directory: Path, out: Path, cache_dir: Path, seeds=(42, 43, 4
         raise ValueError("At least one classification question must be in training")
     # Test questions and features are not encoded until explicit evaluation.
     names = sorted({r["task"] for r in rows})
-    features = feature_matrix(rows, cache_dir)
+    features = entity_matrix(rows, cache_dir, encoder, esm_size)
     texts, revision = encode_questions(names)
     scale = fit_regression_scale(rows)
     x, q, ids = _inputs(rows, features, texts, names, train_names)
@@ -240,11 +334,14 @@ def train_transfer(directory: Path, out: Path, cache_dir: Path, seeds=(42, 43, 4
     out.mkdir(parents=True, exist_ok=True)
     config = {"benchmark_files": manifest["files"], "question_plan": manifest["question_plan"],
               "text_model": TEXT_MODEL, "text_revision": revision,
-              "feature_version": "morgan-v1", "regression_scale": scale,
+              "feature_version": "morgan-v1" if encoder == "morgan" else f"{encoder}-{esm_size}-v1",
+              "entity_encoder": encoder, "esm_size": esm_size if encoder != "morgan" else None,
+              "entity_dimension": int(features.shape[1]), "regression_scale": scale,
               "seeds": list(seeds), "epochs": epochs, "batch_size": batch_size,
               "hidden": hidden, "modes": list(modes), "learning_rate": 0.001,
               "selection": "macro validation classification log-loss and native regression MAE (log10 for half-life)",
-              "test_evaluated": False, "encoder_training": "Fixed chemistry; frozen MiniLM; shared heads trained from scratch",
+              "test_evaluated": False,
+              "encoder_training": f"Frozen entity encoder ({encoder}); frozen MiniLM; shared heads trained from scratch",
               "train_task_balancing": "Round-robin tasks; reshuffled independent batches; each task contributes equally per step",
               "software": {"torch": torch.__version__, "numpy": np.__version__}}
     # Save the protocol before any optimization or score is available.
@@ -324,7 +421,11 @@ def evaluate_transfer(directory: Path, out: Path, cache_dir: Path):
     donors = {t: sorted(n for n in train_names if TASKS[n]["kind"] == TASKS[t]["kind"])[0] for t in test_names}
     names = sorted(set(test_names) | set(donors.values()))
     texts, _ = encode_questions(names, config["text_revision"])
-    x, q, ids = _inputs(test, feature_matrix(test, cache_dir), texts, names, train_names)
+    # Reuse the encoder recorded at training time; a mismatch would silently
+    # feed the heads a different feature space than they were fitted on.
+    features = entity_matrix(test, cache_dir, config.get("entity_encoder", "morgan"),
+                             config.get("esm_size") or "35M")
+    x, q, ids = _inputs(test, features, texts, names, train_names)
     pos = {t: i for i, t in enumerate(names)}
     wrong_q = torch.tensor(texts[[pos[donors[r["task"]]] for r in test]], dtype=torch.float32)
     reports = {}

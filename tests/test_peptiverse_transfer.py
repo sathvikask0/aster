@@ -122,3 +122,33 @@ def test_prepare_train_evaluate_without_using_test_for_selection(tmp_path, monke
         assert set(record["tasks"]) == set(transfer.DEFAULT_PLAN["test"])
     with pytest.raises(FileExistsError, match="already evaluated"):
         transfer.evaluate_transfer(tmp_path / "data", run, tmp_path / "cache")
+
+
+def test_sequence_only_plan_may_cover_a_subset_of_the_assays():
+    assignment = transfer.task_assignment(transfer.SEQUENCE_PLAN)
+    assert set(assignment) < set(pv.TASKS)
+    assert "caco2" not in assignment and "pampa" not in assignment
+    bad = {**transfer.SEQUENCE_PLAN, "train": ["solubility", "not_an_assay"]}
+    with pytest.raises(ValueError, match="Unknown questions"):
+        transfer.task_assignment(bad)
+
+
+def test_sequence_only_build_drops_rows_a_protein_encoder_cannot_read(tmp_path, monkeypatch, rows):
+    # Toxicity ships no sequence column, so give half of its rows a recovered one
+    # and leave the rest unreadable, which is the real situation in miniature.
+    stripped = [{**r, "sequence": "AAAG" + "C" * (i % 5), "sequence_recovered": True}
+                if r["task"] == "toxicity" and i % 2 == 0 else r
+                for i, r in enumerate(rows)]
+    original = {"version": pv.VERSION, "tasks": pv.TASKS, "files": {"fixture": "test"},
+                "split_policy": "global_identity", "limitations": []}
+    with monkeypatch.context() as m:
+        m.setattr(transfer, "load_benchmark", lambda _: (stripped, original))
+        manifest = transfer.build_transfer(tmp_path / "src", tmp_path / "out",
+                                          transfer.SEQUENCE_PLAN, require_sequence=True)
+    assert manifest["require_sequence"] is True
+    assert set(manifest["task_splits"]) == set(transfer.task_assignment(transfer.SEQUENCE_PLAN))
+    filtered = manifest["transfer_audit"]["sequence_filter"]
+    assert filtered["dropped_without_sequence"]["toxicity"] > 0
+    data, loaded = pv.load_benchmark(tmp_path / "out")
+    assert all(r["sequence"] for r in data)
+    assert not any(r["task"] in ("caco2", "pampa") for r in data)

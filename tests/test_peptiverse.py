@@ -37,10 +37,10 @@ def rows():
     return pv.assign_splits(result)
 
 
-def test_all_five_categories_and_eight_assays_are_present():
-    assert len(pv.TASKS) == 8
+def test_all_six_categories_and_nine_assays_are_present():
+    assert len(pv.TASKS) == 9
     assert {s["category"] for s in pv.TASKS.values()} == {
-        "dissolve", "cross_membrane", "survive", "harm", "bind_target"}
+        "dissolve", "cross_membrane", "survive", "harm", "bind_target", "resist_fouling"}
     assert {t for t, s in pv.TASKS.items() if s["kind"] == "regression"} == {
         "pampa", "caco2", "half_life", "binding_affinity"}
     assert "non" in pv.TASKS["hemolysis"]["options"][0].lower()
@@ -93,7 +93,7 @@ def test_invalid_class_label_and_missing_columns_fail():
 def test_split_is_global_deterministic_and_independent_of_labels(rows):
     check = pv.validate_benchmark(rows)
     assert check["cross_split_identity_overlap"] == 0
-    assert len(check["tasks"]) == 8
+    assert len(check["tasks"]) == len(pv.TASKS)
     reordered = pv.assign_splits(list(reversed(rows)))
     assert {r["id"]: r["split"] for r in rows} == {r["id"]: r["split"] for r in reordered}
     mutated = [{**r, "label": -123} for r in rows]
@@ -177,10 +177,10 @@ def test_build_train_and_frozen_evaluation_roundtrip(tmp_path, monkeypatch):
     model_dir, cache = tmp_path / "models", tmp_path / "cache"
     report = train_baselines(out, model_dir, cache)
     assert report["test_evaluated"] is False
-    assert len(report["validation"]["tasks"]) == 8
+    assert len(report["validation"]["tasks"]) == len(pv.TASKS)
     assert not (model_dir / "test_predictions.jsonl").exists()
     result = evaluate_frozen(out, model_dir, cache, "test")
-    assert len(result["tasks"]) == 8
+    assert len(result["tasks"]) == len(pv.TASKS)
     with (out / "train.jsonl").open("a") as stream:
         stream.write("{}\n")
     with pytest.raises(ValueError, match="checksum"):

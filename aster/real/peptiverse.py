@@ -1,8 +1,13 @@
-"""Eight assay endpoints covering the five PeptiVerse drug-property questions.
+"""Nine assay endpoints covering the six PeptiVerse drug-property questions.
 
 This is a supervised, mixed classification/regression benchmark. It does not
 reuse the AMP binary-only Example or claim zero-shot question transfer. Inputs
 are chemical peptide structures and (for affinity) a target protein sequence.
+
+Where an assay ships no sequence column, a sequence is recovered from the
+structure only when reconstruction proves it exact; see peptide_sequence. The
+caco2 and pampa assays are entirely macrocyclic and recover nothing, which is
+the honest answer rather than a gap to paper over.
 """
 from __future__ import annotations
 
@@ -18,9 +23,13 @@ import urllib.request
 import numpy as np
 import pandas as pd
 
+from aster.real.peptide_sequence import sequence_from_smiles
+
 REPO = "ChatterjeeLab/PeptiVerse_data"
 REVISION = "6292abb1be90b7661245dcd0c2505f37c862a750"
-VERSION = 1
+# v2 adds the nonfouling assay and recovers sequences from structures, both of
+# which change example ids and split assignment, so v1 artifacts are not mixable.
+VERSION = 2
 AA = frozenset("ACDEFGHIKLMNPQRSTVWY")
 SPLITS = ("train", "validation", "test")
 
@@ -74,6 +83,13 @@ TASKS = {
         path="toxicity/tox_meta_with_split.csv",
         sha256="757730999cf644f543b57b01e37b0352fadc36f4f1cc0a4d6694f33559c71683",
         label="Label", smiles="SMILES"),
+    "nf": dict(
+        category="resist_fouling", kind="classification", units="binary",
+        question="Is this peptide nonfouling in the source nonfouling dataset?",
+        options=["It is labelled fouling.", "It is labelled nonfouling."],
+        path="nf/nf_smiles_meta_with_split.csv",
+        sha256="0b1d62cc9aae2bd5dca681f468682b762a154c8be85afa21a3e414ca3fdf93b9",
+        label="label", smiles="SMILES", sequence="sequence"),
     "binding_affinity": dict(
         category="bind_target", kind="regression", units="source p-affinity score",
         question="What is this peptide's reported binding-affinity score for the supplied target protein?",
@@ -167,6 +183,11 @@ def normalize_frame(task: str, frame: pd.DataFrame) -> tuple[list[dict], dict]:
             continue
         raw_sequence = _text(item.get(spec.get("sequence", "")))
         sequence = raw_sequence if raw_sequence and set(raw_sequence) <= AA else None
+        # Only when the source publishes nothing usable. Recovery is verified by
+        # reconstruction, so it cannot invent a sequence for a modified peptide.
+        recovered = sequence_from_smiles(structure) if sequence is None else None
+        if recovered is not None:
+            sequence = recovered
         target = _text(item.get(spec.get("target", ""))) or None
         if "target" in spec and (not target or set(target) - (AA | {"X", "B", "Z", "U", "O"})):
             dropped["invalid_target_sequence"] += 1
@@ -182,6 +203,7 @@ def normalize_frame(task: str, frame: pd.DataFrame) -> tuple[list[dict], dict]:
             "question": spec["question"], "options": spec.get("options"),
             "label": int(value) if spec["kind"] == "classification" else float(value),
             "units": spec["units"], "smiles": structure, "sequence": sequence,
+            "sequence_recovered": recovered is not None,
             "source_sequence": raw_sequence or None, "target_sequence": target,
             "target_id": digest(target) if target else None,
             "peptide_id": peptide_id, "assay_type": assay,
@@ -203,7 +225,12 @@ def normalize_frame(task: str, frame: pd.DataFrame) -> tuple[list[dict], dict]:
             conflicts += len(group)
             continue
         row = group[0]
-        row["sequence_aliases"] = sorted({r["source_sequence"] for r in group if r["source_sequence"]})
+        # A recovered sequence is a real identity key: it joins this structure to
+        # differently modified forms of the same sequence in other assays, which
+        # tightens the cross-task leakage check rather than loosening it.
+        row["sequence_aliases"] = sorted({r["source_sequence"] for r in group if r["source_sequence"]}
+                                         | {r["sequence"] for r in group
+                                            if r["sequence_recovered"] and r["sequence"]})
         row["sources"] = [s for r in group for s in r["sources"]]
         row["source_clusters"] = sorted({c for r in group for c in r["source_clusters"]})
         if spec["kind"] == "regression":
@@ -219,7 +246,8 @@ def normalize_frame(task: str, frame: pd.DataFrame) -> tuple[list[dict], dict]:
                     "regression_groups_with_variable_replicates": variable_replicates,
                     "source_columns": list(frame),
                     "source_splits": frame["split"].value_counts().to_dict() if "split" in frame else {},
-                    "sequence_available": sum(r["sequence"] is not None for r in result)}
+                    "sequence_available": sum(r["sequence"] is not None for r in result),
+                    "sequence_recovered_from_structure": sum(r["sequence_recovered"] for r in result)}
 
 
 def assign_splits(rows: list[dict], seed: int = 42,
@@ -386,5 +414,9 @@ def load_benchmark(directory: Path) -> tuple[list[dict], dict]:
         if any(row["split"] != split for row in subset):
             raise ValueError("Row stored in the wrong split file")
         rows.extend(subset)
-    validate_benchmark(rows, task_splits=manifest.get("task_splits"))
+    # A transfer dataset may deliberately carry a subset of the assays, so the
+    # expected task set comes from its own plan rather than from TASKS.
+    task_splits = manifest.get("task_splits")
+    validate_benchmark(rows, tasks=set(task_splits) if task_splits else None,
+                       task_splits=task_splits)
     return rows, manifest
