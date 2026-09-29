@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aster &middot; the Select step: three ways the evaluation lied</title>
+  <meta name="description" content="Four training questions put held-out-question transfer at chance; 484 put it at 0.669. Along the way the evaluation misled itself three times — a confound that mimicked discovery, a holdout too loose to see the effect, and a metric that preferred a constant predictor." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <nav class="doc-nav">
+      <a href="index.html">Overview</a>
+      <a href="negative-result.html">The negative result</a>
+      <a href="state.html">State of the project</a>
+      <a href="rig.html">Control rig</a>
+      <a href="resolution.html">v0.2 benchmark</a>
+      <a href="in-progress.html">v0.3 resolved</a>
+      <a href="milestone.html">Milestone 01</a>
+      <a href="select-step.html" class="here">Select step</a>
+      <span class="spacer"></span>
+      <a href="https://github.com/sathvikask0/aster">GitHub</a>
+    </nav>
+
+    <header>
+      <div class="badge">
+        <span class="badge-dot"></span>
+        Question scale &middot; September 2026
+      </div>
+      <h1>The Select step</h1>
+      <p class="lead">
+        The peptide benchmark holds a whole assay out of training and asks the model to answer it anyway. It
+        fails at chance across four configurations. Scaling the question axis from four to 484 fixes it
+        &mdash; but getting there meant catching the evaluation misleading itself three separate times.
+        <strong>A shortcut and a discovery produce the same number.</strong> This page is the three cases and
+        how each was caught.
+      </p>
+      <div class="meta-bar">
+        <span>Repository: <a href="https://github.com/sathvikask0/aster" target="_blank" rel="noopener">sathvikask0/aster</a></span>
+        <span>&middot;</span>
+        <span>New here? <a href="state.html">Start with the plain-language summary &rarr;</a></span>
+      </div>
+    </header>
+
+    <article>
+      <h2>The protocol</h2>
+      <p class="section-desc">
+        One model reads a peptide and a question in natural language &mdash; <em>does this damage red blood
+        cells?</em> &mdash; and has to answer an assay held out of training entirely. Not a head per assay:
+        a per-property head cannot answer a question it has no parameters for, so the ordinary supervised
+        trainer refuses this dataset outright.
+      </p>
+      <p class="section-desc">
+        Questions and molecular identities are both held out. Splits are decided from identities and
+        question assignments, never from label values. The protocol is written to disk before any
+        optimization runs, checkpoints are hash-verified, and the encoder identity is recorded at training
+        and re-read at evaluation so heads cannot be scored against a feature space they were never fitted
+        on. The test split stays shut.
+      </p>
+
+      <ul class="controls-list">
+        <li><span class="model-name">question</span> &mdash; reads the peptide and the question. The hypothesis.</li>
+        <li><span class="model-name">entity_only</span> &mdash; never sees the question text. Detects a model coasting on the molecule alone.</li>
+        <li><span class="model-name">question_only</span> &mdash; never sees the peptide. Detects a model coasting on the label prior.</li>
+        <li><span class="model-name">task_id</span> &mdash; question as a lookup row, zero vector for anything unseen. Should be at chance on a held-out assay by construction.</li>
+      </ul>
+
+      <div class="callout">
+        Four controls on three seeds, twelve runs per configuration. They exist to make success falsifiable.
+        If a control matches the model, the model has learned nothing the control hasn't &mdash; and that is
+        the whole point of the exercise.
+      </div>
+
+      <h2>On peptides it fails, and the reason is arithmetic</h2>
+      <p class="section-desc">
+        Eight assays, then nine after wiring up the nonfouling split upstream had always shipped. Morgan
+        fingerprints, then frozen ESM-2 concatenated on top. Held-out hemolysis AUROC:
+      </p>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Configuration</th>
+              <th>Train questions</th>
+              <th>Peptide encoder</th>
+              <th>AUROC</th>
+              <th>Selection winner</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>8 assays</td><td class="num">4</td><td>Morgan</td>
+              <td class="num delta-neg">0.508</td><td><span class="model-name">question_only</span></td>
+            </tr>
+            <tr>
+              <td>8 assays</td><td class="num">4</td><td>+ ESM-2 35M</td>
+              <td class="num delta-neg">0.502</td><td><span class="model-name">question_only</span></td>
+            </tr>
+            <tr>
+              <td>9 assays</td><td class="num">5</td><td>+ ESM-2 35M</td>
+              <td class="num delta-neg">0.469</td><td><span class="model-name">question_only</span></td>
+            </tr>
+            <tr>
+              <td>Sequence-only</td><td class="num">4</td><td>+ ESM-2 35M</td>
+              <td class="num delta-neg">0.457</td><td><span class="model-name">question_only</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="section-desc">
+        At or below chance every time, with the control that ignores the peptide winning model selection every
+        time. A protein language model did not help. The obvious next move is a bigger one.
+      </p>
+
+      <div class="highlight-card">
+        <div class="highlight-stat">34,000 peptide examples &middot; 4 questions</div>
+        <div class="highlight-text">
+          The peptide axis has tens of thousands of training examples. The question axis has four &mdash; two
+          per output head. Generalizing to a fifth assay means fitting a function of a 384-dimensional
+          question embedding from two points. No encoder fixes that, so a 35M&nbsp;&rarr;&nbsp;650M sweep
+          would have spent days confirming a number the counting argument already predicted.
+        </div>
+      </div>
+
+      <p class="section-desc">
+        So the cheap discriminating experiment instead: the same protocol and the same four controls on
+        <strong>617 ToxCast assays</strong> &mdash; 1.53M labels over 8,579 molecules, split
+        <span class="num">484 / 68 / 65</span> by assay, no single-class assays, positive rates matched
+        across splits. Small molecules rather than peptides, so this is a test of the mechanism and says
+        nothing about peptide biology. If the mechanism is sound, plentiful questions should make it work.
+      </p>
+
+      <h2>Three ways the evaluation lied</h2>
+
+      <div class="timeline">
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">01</span>
+            <span class="exp-tag tag-wrong">Confound</span>
+            <span class="exp-title">A 0.768 result that was almost entirely a shortcut</span>
+          </div>
+          <div class="exp-body">
+            With molecules shared across splits, <span class="model-name">question</span> reached
+            <strong class="num">0.7679</strong> on assays never seen in training. Against chance that reads
+            as a finding. But <span class="model-name">entity_only</span>, which never reads the question,
+            reached <span class="num">0.7635</span> &mdash; and the gap flipped sign between seeds. Nearly
+            all of the headline was a molecule-level promiscuity prior: a compound active in 400 assays is a
+            good bet in the 401st, no comprehension required. The only clean signal was calibration, where
+            log loss separated <span class="num">0.336</span> from <span class="num">0.398</span>, because
+            assay names carry base rates and ToxCast base rates span 0.3%&ndash;83%.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">02</span>
+            <span class="exp-tag tag-decisive">Decisive</span>
+            <span class="exp-title">A stricter holdout is what made the real effect visible</span>
+          </div>
+          <div class="exp-body">
+            Rebuilt so that <strong>no molecule appears in two splits</strong> &mdash; 947k train labels,
+            zero shared molecules. The shortcut shrank and the effect separated:
+            <strong class="num">0.6693 &plusmn; 0.008</strong> against
+            <span class="num">0.6489 &plusmn; 0.011</span>, ahead on every seed
+            (<span class="delta-pos">+0.021</span>, <span class="delta-pos">+0.025</span>,
+            <span class="delta-pos">+0.015</span>) where the loose split's <span class="num">+0.004</span>
+            had flipped sign. Same data, same model, same code. Tightening the holdout turned an unreadable
+            comparison into a sign-stable one &mdash; the looser split had been hiding the result, not
+            inflating it.
+          </div>
+        </div>
+
+        <div class="exp-card">
+          <div class="exp-header">
+            <span class="exp-num">03</span>
+            <span class="exp-tag tag-wrong">Broken metric</span>
+            <span class="exp-title">The selection objective preferred a constant predictor</span>
+          </div>
+          <div class="exp-body">
+            Checkpoints were selected on macro log loss. In the strict split
+            <span class="model-name">question_only</span> scored the <em>best</em> log loss of any control
+            &mdash; <strong class="num">0.4228</strong> against <span class="num">0.4642</span> &mdash; while
+            having <span class="num">AUROC = 0.5000</span> and <span class="num">MCC = 0</span>. A literal
+            constant. With base rates spanning 0.3%&ndash;83%, safe scores better than skilled, so selection
+            would have shipped the constant and then scored it on test. Found before the test split was
+            opened; it stays shut until the selection rule is fixed.
+          </div>
+        </div>
+      </div>
+
+      <div class="callout">
+        The transferable lesson is the reporting baseline. Molecule propensity survives molecule holdout, so
+        question transfer has to be stated <strong>against <span class="model-name">entity_only</span></strong>,
+        not against chance. Reported against chance, this work would claim 0.669. Reported honestly, it
+        claims <span class="num">+0.020</span> over a control that reads no question at all.
+      </div>
+
+      <h2>Where the questions came from, and what could not be fixed</h2>
+      <p class="section-desc">
+        Three assays ship structures with no sequence column, which leaves a protein encoder nothing to read.
+        Sequences are recoverable from SMILES when the molecule really is a linear peptide of standard
+        L-residues &mdash; so recover them, but make the parse prove itself: rebuild the recovered letters
+        into a peptide and require its canonical SMILES to equal the input's. Anything else returns nothing,
+        because feeding an encoder a molecule that does not exist is worse than feeding it nothing.
+      </p>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Assay</th><th>Sequences before</th><th>Recovered</th><th>Why</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>toxicity</td><td class="num">0 / 11,036</td><td class="num delta-pos">4,637 (42%)</td>
+              <td>Plain linear L-peptides; verified by reconstruction</td>
+            </tr>
+            <tr>
+              <td>caco2</td><td class="num">0 / 606</td><td class="num">0</td>
+              <td>100% macrocyclic, 85% N-methylated &mdash; no sequence exists</td>
+            </tr>
+            <tr>
+              <td>pampa</td><td class="num">0 / 6,869</td><td class="num">0</td>
+              <td>100% macrocyclic, 95% N-methylated &mdash; no sequence exists</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="section-desc">
+        Cross-checked against the 4,250 hemolysis rows that do publish a sequence:
+        <strong>zero disagreements</strong>. The two macrocyclic assays correctly recover nothing, which
+        matches upstream &mdash; it ships no sequence-based embeddings for exactly those three assays. A
+        refusal was the honest answer, and those assays need a SMILES-native encoder instead.
+      </p>
+
+      <div class="correction">
+        <strong>A bug worth recording.</strong> Side chains were first keyed without marking the attachment
+        point. Valine's isopropyl and proline's ring both reduce to propane that way, and leucine and
+        isoleucine both reduce to 2-methylbutane. The parser read <strong>every proline as a valine</strong>
+        and still looked like it worked &mdash; 100% "recovery" on toxicity. It was only visible against the
+        4,250 rows with published sequences, where it matched 245 of 400. Marking the alpha carbon as a dummy
+        atom separates all twenty residues. Recovery then honestly drops to 42%.
+      </div>
+
+      <h2>What this changes</h2>
+      <p class="section-desc">
+        The mechanism is sound and the bottleneck is the number of questions, not the encoder. Four questions
+        put held-out-question transfer at chance; 484 put it at <span class="num">0.669</span> on assays and
+        molecules never seen. Nothing about a bigger protein model would have changed that, and two runs
+        settled what a model-size sweep would have obscured.
+      </p>
+      <ul class="controls-list">
+        <li><strong>Fix the selection rule first.</strong> Skill scores against per-assay base rates, so
+          calibration and discrimination are separated before a checkpoint is chosen. No test evaluation
+          until then.</li>
+        <li><strong>Report against controls, not chance.</strong> Every future number on this site carries
+          its <span class="model-name">entity_only</span> reference beside it.</li>
+        <li><strong>Get more peptide questions.</strong> Nine assays is thin, and four of them are consumed
+          by the held-out splits. This is the only change that attacks the real bottleneck.</li>
+        <li><strong>Match the holdout to the claim.</strong> Holding molecules out changed the answer once
+          already. If the claim is a new scaffold, hold out scaffolds.</li>
+      </ul>
+
+      <p class="zero-note">
+        Every run above is reproducible from the repository: pinned dataset revisions with checksums, the
+        protocol written before optimization, and <span class="num">test_evaluated: false</span> on all of
+        them. 165 tests, green in CI.
+      </p>
+    </article>
+  </main>
+</body>
+</html>
